@@ -24,7 +24,7 @@ Corvus is a demonstration project: a working simulation of Corvus Energy's Orca 
 |------|-------|-------------|
 | `corvus_demo.py` | 1,356 | Complete v4 simulation — VirtualPack, PackController, ArrayController, 8-phase scenario |
 | `corvus_plot.png` | — | Generated 5-panel plot (SoC, voltage, temperature, current/limits, modes) |
-| `corvus_output.csv` | 1,346 | Time-series output from demo scenario |
+| `corvus_output.csv` | 1,347 | Time-series output from demo scenario (1,346 data rows + header) |
 
 ### C Port
 | Path | Lines | Description |
@@ -32,15 +32,13 @@ Corvus is a demonstration project: a working simulation of Corvus Energy's Orca 
 | `c/corvus_bms.h` | 278 | Public API — structs, enums, function prototypes |
 | `c/corvus_bms.c` | 1,056 | Core BMS implementation — all physics and controls |
 | `c/corvus_demo.c` | 436 | 8-phase scenario runner with CSV output |
-| `c/test_corvus.c` | 713 | 20 test suites, 85 assertions |
+| `c/test_corvus.c` | 713 | 20 test suites, 93 assertions |
 | `c/Makefile` | 23 | Build targets: `make`, `make test`, `make debug` (ASan/UBSan) |
 
 ### Documentation
 | Path | Lines | Description |
 |------|-------|-------------|
-| `README.md` | 160 | Project overview, parameters, how to run, limitations |
-| `RESEARCH.md` | 314 | Research data — resistance tables, OCV curve, thermal params, Kirchhoff derivation |
-| `FIX_PLAN.md` | 222 | Tiered fix plan from critic reviews (Tier 1-4) |
+| `README.md` | 160 | Project overview, parameters, how to run, 17 documented limitations |
 | `LICENSE` | 21 | MIT License (2026 HOLOS-git) |
 | `INDEX.md` | — | This file |
 
@@ -49,13 +47,6 @@ Corvus is a demonstration project: a working simulation of Corvus Energy's Orca 
 |------|-------|-------------|
 | `site/index.html` | 592 | Crow narrator walkthrough — dark theme, speech bubbles, C section |
 | `site/corvus_plot.png` | — | Plot copy for site embedding |
-
-### Reference (local only, git-ignored)
-| Path | Description |
-|------|-------------|
-| `reference/pdfs/` | Original PDFs — Orca ESS Integrator Manual, Blue Whale datasheet, product brochure |
-| `reference/txt/` | Converted text versions for AI consumption |
-| `corvus_plan.txt` | Perplexity research + initial scoping (~32K tokens) |
 
 ---
 
@@ -83,8 +74,8 @@ Corvus is a demonstration project: a working simulation of Corvus Energy's Orca 
 3. Equalization currents at zero load
 4. Overcurrent warning demonstration
 5. Cooling failure → thermal warning → fault
-6. Fault reset denied (hold time) → accepted
-7. Emergency cooling → reset
+6. Warning hysteresis demonstration
+7. Fault reset denied (hold time) → accepted
 8. Reconnection → disconnect
 
 ---
@@ -100,7 +91,7 @@ Corvus is a demonstration project: a working simulation of Corvus Energy's Orca 
 | v4 polish | KCL fix, warnings, temp floor, limitations | 6 critics (+legal, fresh eyes) |
 | v4 final | C port, electrochemistry fixes, site | 3 C-specific critics + Nick persona |
 
-**Total:** ~40 sub-agent reviews, ~5,200 lines of code (Python + C), 85 test assertions, 13 documented limitations.
+**Total:** ~40 sub-agent reviews, ~3,840 lines of code (Python + C), 93 test assertions, 17 documented limitations.
 
 ---
 
@@ -108,4 +99,4 @@ Corvus is a demonstration project: a working simulation of Corvus Energy's Orca 
 
 - **Netlify:** corvus-demo.netlify.app (site ID: ce32b1e9-16f8-4af4-bc42-aa657c4494ac)
 - **GitHub:** HOLOS-git/corvus (public, MIT licensed)
-- **Hawthorn:** projects/corvus/ on branch agent-state/hawthorn
+- **Hawthorn:** projects/mockingbird/corvus/ on branch agent-state/hawthorn
