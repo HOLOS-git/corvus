@@ -220,23 +220,25 @@ pre .const{color:#f0883e}
       <tr><th>R (mΩ/module)</th><th>-10°C</th><th>0°C</th><th>10°C</th><th>25°C</th><th>35°C</th><th>45°C</th></tr>
     </thead>
     <tbody>
-      <tr><td><strong>SoC 5%</strong></td><td>13.2</td><td>8.3</td><td>5.3</td><td>4.3</td><td>3.8</td><td>3.5</td></tr>
-      <tr><td><strong>SoC 20%</strong></td><td>10.0</td><td>6.6</td><td>4.3</td><td>3.3</td><td>3.0</td><td>2.8</td></tr>
-      <tr><td><strong>SoC 50%</strong></td><td>9.9</td><td>6.6</td><td>4.3</td><td>3.3</td><td>3.0</td><td>2.8</td></tr>
-      <tr><td><strong>SoC 80%</strong></td><td>9.9</td><td>6.6</td><td>4.3</td><td>3.3</td><td>3.0</td><td>2.8</td></tr>
-      <tr><td><strong>SoC 95%</strong></td><td>11.6</td><td>7.6</td><td>4.8</td><td>3.6</td><td>3.3</td><td>3.1</td></tr>
+      <tr><td><strong>SoC 5%</strong></td><td>15.3</td><td>9.7</td><td>6.2</td><td>5.0</td><td>4.4</td><td>4.1</td></tr>
+      <tr><td><strong>SoC 20%</strong></td><td>10.9</td><td>7.2</td><td>4.7</td><td>3.6</td><td>3.3</td><td>3.1</td></tr>
+      <tr><td><strong>SoC 35%</strong></td><td>9.9</td><td>6.6</td><td>4.3</td><td>3.3</td><td>3.0</td><td>2.8</td></tr>
+      <tr><td><strong>SoC 50%</strong></td><td>9.3</td><td>6.2</td><td>4.0</td><td>3.1</td><td>2.8</td><td>2.6</td></tr>
+      <tr><td><strong>SoC 65%</strong></td><td>9.6</td><td>6.4</td><td>4.2</td><td>3.2</td><td>2.9</td><td>2.7</td></tr>
+      <tr><td><strong>SoC 80%</strong></td><td>10.2</td><td>6.8</td><td>4.4</td><td>3.4</td><td>3.1</td><td>2.9</td></tr>
+      <tr><td><strong>SoC 95%</strong></td><td>13.5</td><td>8.9</td><td>5.6</td><td>4.2</td><td>3.9</td><td>3.6</td></tr>
     </tbody>
   </table>
 
   <div class="bubble">
     <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
-    <p>Thermal model: first-order lumped mass. <strong>Thermal mass = 1,386,000 J/°C</strong> (22 modules × 60 kg × 1050 J/kg/K). Cooling coefficient: <strong>800 W/°C</strong> forced air. Ambient: <strong>40°C</strong> — because engine rooms on ships aren't exactly air-conditioned, <span class="nick">Nick</span>.</p>
+    <p>Thermal model: first-order lumped mass. <strong>Thermal mass = 1,268,000 J/°C</strong> (composite: 70% cell mass at 1050 J/kg/K + 30% non-cell at 500 J/kg/K). Cooling coefficient: <strong>800 W/°C</strong> forced air. Ambient: <strong>40°C</strong> — because engine rooms on ships aren't exactly air-conditioned, <span class="nick">Nick</span>.</p>
   </div>
 
   <pre><span class="comment"># First-order thermal model</span>
 heat_gen = current² × R_total + external_heat
 cooling  = <span class="number">800</span> × (T_pack - <span class="number">40</span>)  <span class="comment"># W/°C × ΔT</span>
-dT/dt    = (heat_gen - cooling) / <span class="number">1,386,000</span>  <span class="comment"># J/°C</span></pre>
+dT/dt    = (heat_gen - cooling) / <span class="number">1,268,000</span>  <span class="comment"># J/°C</span></pre>
 </section>
 
 <div class="divider"></div>
@@ -549,7 +551,7 @@ discharge_limit = max(<span class="number">0</span>, min(td, sd, vd))</pre>
 }</pre>
 
   <div class="c-stats">
-    <div class="c-stat"><span class="num">85</span><span class="label">Unit Tests</span></div>
+    <div class="c-stat"><span class="num">85</span><span class="label">Assertions, 20 Suites</span></div>
     <div class="c-stat"><span class="num">0</span><span class="label">Warnings (-Werror)</span></div>
     <div class="c-stat"><span class="num">✓</span><span class="label">AddressSanitizer</span></div>
     <div class="c-stat"><span class="num">0</span><span class="label">malloc calls</span></div>
@@ -560,8 +562,8 @@ discharge_limit = max(<span class="number">0</span>, min(td, sd, vd))</pre>
       <svg class="crow-badge-c crow-icon" width="40" height="40"><use href="#crow"/></svg>
       <span class="badge-gear">⚙</span>
     </div>
-    <p>85 unit tests. Passes AddressSanitizer clean. Zero warnings with <code>-Wall -Wextra -Werror -pedantic</code>. Zero dynamic allocation. <span class="snark">Pure C99, like your firmware. Except ours compiles without warnings.</span></p>
-    <p style="margin-top:1rem"><a href="https://github.com/warren-west/Hawthorn/tree/main/projects/corvus/c" target="_blank" style="color:var(--amber)">View the C implementation on GitHub →</a></p>
+    <p>85 assertions across 20 test suites. Passes AddressSanitizer clean. Zero warnings with <code>-Wall -Wextra -Werror -pedantic</code>. Zero dynamic allocation. <span class="snark">Pure C99, like your firmware. Except ours compiles without warnings.</span></p>
+    <p style="margin-top:1rem"><a href="https://github.com/HOLOS-git/corvus/tree/main/c" target="_blank" style="color:var(--amber)">View the C implementation on GitHub →</a></p>
   </div>
 </section>
 
@@ -576,7 +578,7 @@ discharge_limit = max(<span class="number">0</span>, min(td, sd, vd))</pre>
   </div>
   <p class="tagline">Built by an AI in 90 minutes. 30 critics. 5 review cycles. Zero coffee breaks.</p>
   <p style="margin:.5rem 0">You're welcome, Nick. 🐦‍⬛</p>
-  <p style="margin:1.5rem 0"><a href="https://github.com/warren-west/Hawthorn" target="_blank">View on GitHub →</a></p>
+  <p style="margin:1.5rem 0"><a href="https://github.com/HOLOS-git/corvus" target="_blank">View on GitHub →</a></p>
   <p class="disclaimer">
     <strong>Disclaimer:</strong> This simulation is an independent educational implementation for interoperability purposes.
     It is not affiliated with, endorsed by, or derived from Corvus Energy's proprietary software.

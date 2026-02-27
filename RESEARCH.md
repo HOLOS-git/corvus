@@ -24,11 +24,15 @@ Large NMC pouch cells typically show:
 
 | SoC \ Temp | -10°C | 0°C  | 10°C | 25°C | 35°C | 45°C |
 |------------|-------|------|------|------|------|------|
-| 5%         | 13.2  | 8.3  | 5.3  | 4.3  | 3.8  | 3.5  |
-| 20%        | 10.0  | 6.6  | 4.3  | 3.3  | 3.0  | 2.8  |
-| 50%        | 9.9   | 6.6  | 4.3  | 3.3  | 3.0  | 2.8  |
-| 80%        | 9.9   | 6.6  | 4.3  | 3.3  | 3.0  | 2.8  |
-| 95%        | 11.6  | 7.6  | 4.8  | 3.6  | 3.3  | 3.1  |
+| 5%         | 15.3  | 9.7  | 6.2  | 5.0  | 4.4  | 4.1  |
+| 20%        | 10.9  | 7.2  | 4.7  | 3.6  | 3.3  | 3.1  |
+| 35%        | 9.9   | 6.6  | 4.3  | 3.3  | 3.0  | 2.8  |
+| 50%        | 9.3   | 6.2  | 4.0  | 3.1  | 2.8  | 2.6  |
+| 65%        | 9.6   | 6.4  | 4.2  | 3.2  | 2.9  | 2.7  |
+| 80%        | 10.2  | 6.8  | 4.4  | 3.4  | 3.1  | 2.9  |
+| 95%        | 13.5  | 8.9  | 5.6  | 4.2  | 3.9  | 3.6  |
+
+**Note**: The impedance vs SoC follows a U-shape — minimum around 40-60% SoC due to charge-transfer resistance minimum at mid-lithiation, higher at extremes (depleted anode at low SoC, increased charge-transfer resistance at nearly-full cathode).
 
 **Confidence: HIGH** for the 25°C/mid-SoC value (manufacturer data). MEDIUM for the temperature/SoC variation (based on published NMC pouch cell literature patterns scaled to the known 3.3 mΩ baseline).
 
@@ -62,7 +66,7 @@ R_PACK_NOMINAL = 72.6e-3   # Ω, 22 modules in series
 
 ### Recommended Values for Demo
 ```python
-THERMAL_MASS = 1_200_000    # J/°C (1.2 MJ/°C) for full pack
+THERMAL_MASS = 1_268_000    # J/°C (1.27 MJ/°C) for full pack
 THERMAL_COOLING_COEFF = 800  # W/°C (forced air, moderate airflow)
 AMBIENT_TEMP = 25.0          # °C
 ```
@@ -89,7 +93,7 @@ SOC_BREAKPOINTS = [
 OCV_VALUES = [  # Volts per cell
     3.000, 3.280, 3.420, 3.480, 3.510, 3.555, 3.590, 3.610,
     3.625, 3.638, 3.650, 3.662, 3.675, 3.690, 3.710, 3.735,
-    3.765, 3.800, 3.845, 3.900, 3.960, 4.030, 4.100, 4.175
+    3.765, 3.800, 3.845, 3.900, 3.960, 4.030, 4.100, 4.190
 ]
 
 # For a 14s module (50V nominal):
@@ -105,7 +109,7 @@ OCV_VALUES = [  # Volts per cell
 | 10%  | 3.510  | 1081 V  |
 | 50%  | 3.675  | 1132 V  |
 | 90%  | 3.960  | 1220 V  |
-| 100% | 4.175  | 1286 V  |
+| 100% | 4.190  | 1291 V  |
 
 **Confidence: HIGH** — NMC 622 OCV curves are well-characterized in literature. Exact cell-to-cell variation is small (~±5 mV).
 
@@ -259,8 +263,9 @@ def solve_bus_voltage(ocv_packs, r_packs, i_load):
     # Sum of (1 / R_k)
     sum_inv_r = sum(1.0 / r for r in r_packs)
     
-    # V_bus = (Σ(OCV_k/R_k) - I_load) / Σ(1/R_k)
-    v_bus = (sum_ocv_over_r - i_load) / sum_inv_r
+    # V_bus = (Σ(OCV_k/R_k) + I_load) / Σ(1/R_k)
+    # Note: I_load > 0 for charging (current into packs).
+    v_bus = (sum_ocv_over_r + i_load) / sum_inv_r
     
     return v_bus
 
@@ -272,7 +277,7 @@ def solve_bus_voltage(ocv_packs, r_packs, i_load):
 - **Self-balancing**: A pack with higher SoC (higher OCV) naturally delivers more current
 - **No iteration needed**: The linear model has a closed-form solution
 - **Handles asymmetry**: Different SoC, temperature, and aging states per pack
-- **Sign convention**: I_load > 0 for discharge. I_k > 0 means pack is discharging.
+- **Sign convention**: I_load > 0 for charging (into packs). I_k > 0 means pack is charging.
 
 ### When Non-Linear Effects Matter
 The simple linear model assumes constant R and OCV during a timestep. For better accuracy:
@@ -304,6 +309,6 @@ This is standard circuit theory (superposition / nodal analysis) applied to batt
 | Pack voltage range | ~924-1286 V | OCV curve × 308 |
 | Pack nominal voltage | ~1100 V | At ~50% SoC |
 | Max C-rate (charge/discharge) | 3C / 5C | Figures 28-30 (BOL, optimal temp) |
-| THERMAL_MASS | 1,200,000 J/°C | Estimated from mass + specific heat |
+| THERMAL_MASS | 1,268,000 J/°C | Composite: 70% cells × 1050 + 30% non-cell × 500 |
 | THERMAL_COOLING_COEFF | 800 W/°C | Estimated for forced-air |
-| NMC cell OCV range | 3.0 - 4.175 V | Literature (NMC 622) |
+| NMC cell OCV range | 3.0 - 4.190 V | Literature (NMC 622) |

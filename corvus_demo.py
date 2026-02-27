@@ -11,8 +11,8 @@ interoperability purposes.
 Reference: Corvus Energy Orca ESS integrator documentation
 
 v4 Changes:
-  - 2D resistance lookup R(SoC, T) with bilinear interpolation (3.3 mΩ/module baseline)
-  - Thermal mass 1,386,000 J/°C (22 × 60 kg × 1050 J/kg/K), cooling 800 W/°C
+  - 2D resistance lookup R(SoC, T) with bilinear interpolation (U-shaped vs SoC, 3.3 mΩ baseline)
+  - Thermal mass 1,268,000 J/°C (composite: 70% cells × 1050 + 30% non-cell × 500), cooling 800 W/°C
   - 24-point NMC 622 OCV curve from literature
   - Figure 28/29/30 breakpoints for temp/SoC/SEV current limits
   - Double-step bug fixed: PackController.step() no longer drives pack physics
@@ -86,8 +86,9 @@ NOMINAL_CAPACITY_AH = 128.0        # Section 1.3: "For Orca 1C is 128A"
 NUM_CELLS_SERIES = NUM_MODULES * CELLS_PER_MODULE  # 308
 
 # Thermal parameters -- from RESEARCH.md
-# 22 modules × 60 kg/module × 1050 J/(kg·K) ≈ 1,386,000 J/°C
-THERMAL_MASS = 1_386_000.0         # J/°C
+# Composite: 70% cell mass (1050 J/kg/K) + 30% non-cell (500 J/kg/K)
+# 22 × 42 kg cells × 1050 + (22 × 18 kg + 200 kg) × 500 ≈ 1,268,000 J/°C
+THERMAL_MASS = 1_268_000.0         # J/°C
 THERMAL_COOLING_COEFF = 800.0      # W/°C -- forced air cooling
 AMBIENT_TEMP = 40.0                # °C -- realistic engine room
 
@@ -100,6 +101,10 @@ WARNING_HOLD_TIME = 10.0           # seconds
 # Fault reset safe-state hold time -- Section 6.3.5
 FAULT_RESET_HOLD_TIME = 60.0       # seconds
 
+# Coulombic efficiency -- typical NMC 622
+# During charge, ~0.2% of current goes to parasitic reactions (SEI growth)
+COULOMBIC_EFFICIENCY = 0.998
+
 
 # =====================================================================
 # RESISTANCE LOOKUP TABLE -- R_module(T, SoC) in mΩ
@@ -108,14 +113,19 @@ FAULT_RESET_HOLD_TIME = 60.0       # seconds
 # =====================================================================
 
 _R_TEMPS = np.array([-10.0, 0.0, 10.0, 25.0, 35.0, 45.0])
-_R_SOCS = np.array([0.05, 0.20, 0.50, 0.80, 0.95])
+_R_SOCS = np.array([0.05, 0.20, 0.35, 0.50, 0.65, 0.80, 0.95])
 # mΩ per module -- rows=SoC, cols=Temp
+# U-shaped impedance vs SoC: minimum at 50% (optimal intercalation gradient),
+# higher at extremes (depleted anode at low SoC, full cathode at high SoC).
+# Temperature multipliers preserved from NMC pouch cell literature.
 _R_TABLE = np.array([
-    [13.2, 8.3, 5.3, 4.3, 3.8, 3.5],   # SoC=5%
-    [10.0, 6.6, 4.3, 3.3, 3.0, 2.8],   # SoC=20%
-    [ 9.9, 6.6, 4.3, 3.3, 3.0, 2.8],   # SoC=50%
-    [ 9.9, 6.6, 4.3, 3.3, 3.0, 2.8],   # SoC=80%
-    [11.6, 7.6, 4.8, 3.6, 3.3, 3.1],   # SoC=95%
+    [15.3,  9.7,  6.2,  5.0,  4.4,  4.1],  # SoC=5%  (high — depleted anode)
+    [10.9,  7.2,  4.7,  3.6,  3.3,  3.1],  # SoC=20%
+    [ 9.9,  6.6,  4.3,  3.3,  3.0,  2.8],  # SoC=35%
+    [ 9.3,  6.2,  4.0,  3.1,  2.8,  2.6],  # SoC=50% (minimum — optimal intercalation)
+    [ 9.6,  6.4,  4.2,  3.2,  2.9,  2.7],  # SoC=65%
+    [10.2,  6.8,  4.4,  3.4,  3.1,  2.9],  # SoC=80%
+    [13.5,  8.9,  5.6,  4.2,  3.9,  3.6],  # SoC=95% (high — full cathode)
 ])
 
 
@@ -168,7 +178,7 @@ _SOC_BP = np.array([
 _OCV_BP = np.array([
     3.000, 3.280, 3.420, 3.480, 3.510, 3.555, 3.590, 3.610,
     3.625, 3.638, 3.650, 3.662, 3.675, 3.690, 3.710, 3.735,
-    3.765, 3.800, 3.845, 3.900, 3.960, 4.030, 4.100, 4.175,
+    3.765, 3.800, 3.845, 3.900, 3.960, 4.030, 4.100, 4.190,
 ])
 
 
@@ -293,7 +303,13 @@ class VirtualPack:
             self.current = current
 
         # Coulomb counting -- Section 2.3
-        delta_soc = (self.current * dt) / (self.capacity_ah * 3600.0)
+        # Coulombic efficiency: during charge, only 99.8% of current
+        # goes to lithium intercalation (rest is parasitic SEI growth)
+        if self.current > 0:  # charging
+            effective_current = self.current * COULOMBIC_EFFICIENCY
+        else:  # discharging — full coulombic extraction
+            effective_current = self.current
+        delta_soc = (effective_current * dt) / (self.capacity_ah * 3600.0)
         self.soc = np.clip(self.soc + delta_soc, 0.0, 1.0)
 
         # First-order thermal: dT/dt = (I²R + external - cooling) / C_thermal
@@ -1097,19 +1113,33 @@ def run_scenario(output_dir: str = "."):
         print(f"  OC warning not triggered in 40s (check timer)")
     print()
 
-    # ── PHASE 5: Temperature ramp on Pack 3 (t=440..680s) ──
-    # With thermal mass of 1.386 MJ/°C, need ~500 kW external heat to ramp
-    # from 40°C to 65°C (ΔT=25°C) in ~70s: P = C×ΔT/Δt = 1.386e6×25/70 ≈ 495 kW
-    print("[Phase 5] Temperature ramp on Pack 3 -- warning, fault, HW safety")
+    # ── PHASE 5: Cooling system failure on Pack 3 during heavy charging ──
+    # Realistic maritime incident: fan failure reduces cooling from 800 to 50 W/°C
+    # (natural convection only). High current charging + adjacent machinery heat.
+    # I²R at ~300A ≈ 6 kW/pack + 50 kW adjacent machinery heat.
+    REDUCED_COOLING_COEFF = 50.0  # W/°C, natural convection only
+    ADJACENT_HEAT = 50_000.0      # 50 kW from adjacent machinery in engine room
+
+    print("[Phase 5] Cooling system failure on Pack 3 -- fan failure during heavy charging")
+    print(f"  Normal cooling: {THERMAL_COOLING_COEFF} W/°C → Fan failure: {REDUCED_COOLING_COEFF} W/°C")
+    print(f"  Adjacent machinery heat: {ADJACENT_HEAT/1e3:.0f} kW")
     print(f"  Warning: {SE_OVER_TEMP_WARNING}°C, Fault: {SE_OVER_TEMP_FAULT}°C, HW Safety: {HW_SAFETY_OVER_TEMP}°C")
 
     warn_logged = fault_logged = False
-    external_heat_w = 500_000.0  # 500 kW -- aggressive external heat injection
 
-    for _ in range(240):
-        current = 100.0 if not controllers[2].fault_latched else 80.0
-        ext_heat = {3: external_heat_w}
-        array.step(dt, current, external_heat=ext_heat)
+    for _ in range(700):
+        charge_current = 0.0 if controllers[2].fault_latched else 900.0  # 300A per pack target
+
+        # Simulate fan failure on Pack 3: compensate built-in cooling to achieve
+        # effective cooling of REDUCED_COOLING_COEFF W/°C
+        if not controllers[2].fault_latched:
+            cooling_compensation = (THERMAL_COOLING_COEFF - REDUCED_COOLING_COEFF) * \
+                                   (packs[2].temperature - AMBIENT_TEMP)
+            ext_heat = {3: cooling_compensation + ADJACENT_HEAT}
+        else:
+            ext_heat = {}  # Fan restored after fault detected
+
+        array.step(dt, charge_current, external_heat=ext_heat)
         record(t)
 
         if packs[2].temperature >= SE_OVER_TEMP_WARNING and not warn_logged:
@@ -1123,27 +1153,33 @@ def run_scenario(output_dir: str = "."):
             print(f"    Contactors OPEN, limits ZERO")
             events.append((t, f"Pack 3 FAULT\n{packs[2].temperature:.0f}°C"))
             fault_logged = True
-            external_heat_w = 0.0  # Stop heating after fault
 
+        if fault_logged:
+            break  # Stop heating phase once fault latches + a few seconds
+
+        t += dt
+
+    # Let the fault state settle for a few more seconds after fault
+    for _ in range(10):
+        array.step(dt, 80.0)
+        record(t)
         t += dt
 
     print(f"  Pack 3 mode: {controllers[2].mode.name}, temp: {packs[2].temperature:.1f}°C\n")
 
     # ── PHASE 6: Temperature hysteresis demo ──
-    # Warning on Pack 3 shouldn't clear immediately due to hold time
-    print("[Phase 6] Warning hysteresis -- even if temp drops slightly, hold time prevents clear")
+    # Normal cooling restored (fan fixed). Warning hold time prevents premature clear.
+    print("[Phase 6] Warning hysteresis -- cooling restored, hold time prevents premature clear")
     print(f"  Warning hold time: {WARNING_HOLD_TIME}s")
 
-    # Cool pack 3 slightly via negative external heat
     for _ in range(15):
-        ext_heat = {3: -200_000.0}  # Moderate cooling
-        array.step(dt, 80.0, external_heat=ext_heat)
+        array.step(dt, 80.0)  # Normal cooling resumes (no external heat)
         record(t)
         t += dt
-    print(f"  Pack 3 temp after slight cooling: {packs[2].temperature:.1f}°C")
+    print(f"  Pack 3 temp after cooling restored: {packs[2].temperature:.1f}°C")
     print(f"  Pack 3 warning still active: {controllers[2].has_warning}\n")
 
-    # ── PHASE 7: Fault reset attempt (t~700) ──
+    # ── PHASE 7: Fault reset attempt ──
     print("[Phase 7] Fault latch -- reset denied, then wait for hold time")
 
     result = controllers[2].manual_fault_reset()
@@ -1152,12 +1188,10 @@ def run_scenario(output_dir: str = "."):
           f"{'OK' if result else 'DENIED'}")
     events.append((t, "RESET DENIED"))
 
-    # Cool Pack 3 via external cooling through thermal model (Fix #15)
-    # Use -100 kW cooling (e.g., emergency ventilation) -- realistic for marine
-    print("  Cooling Pack 3 via emergency ventilation (-100 kW)...")
-    for _ in range(120):
-        ext_heat = {3: -100_000.0}
-        array.step(dt, 80.0, external_heat=ext_heat)
+    # Cool Pack 3 via normal cooling (fan restored) -- just wait
+    print("  Waiting for Pack 3 to cool below fault threshold (normal cooling)...")
+    for _ in range(200):
+        array.step(dt, 80.0)
         record(t)
         t += dt
 
@@ -1170,9 +1204,8 @@ def run_scenario(output_dir: str = "."):
 
     if not result:
         # Continue cooling until safe state holds for 60s
-        for _ in range(80):
-            ext_heat = {3: -50_000.0}
-            array.step(dt, 80.0, external_heat=ext_heat)
+        for _ in range(120):
+            array.step(dt, 80.0)
             record(t)
             t += dt
         result = controllers[2].manual_fault_reset()

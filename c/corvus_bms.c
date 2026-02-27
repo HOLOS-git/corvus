@@ -59,23 +59,28 @@ static double linterp(const double *bp, const double *val, int n, double x)
  * ===================================================================== */
 
 #define R_NUM_TEMPS 6
-#define R_NUM_SOCS  5
+#define R_NUM_SOCS  7
 
 static const double r_temps[R_NUM_TEMPS] = {
     -10.0, 0.0, 10.0, 25.0, 35.0, 45.0
 };
 
 static const double r_socs[R_NUM_SOCS] = {
-    0.05, 0.20, 0.50, 0.80, 0.95
+    0.05, 0.20, 0.35, 0.50, 0.65, 0.80, 0.95
 };
 
-/* mΩ per module -- rows=SoC, cols=Temp */
+/* mΩ per module -- rows=SoC, cols=Temp
+ * U-shaped impedance vs SoC: minimum at 50% (optimal intercalation gradient),
+ * higher at extremes (depleted anode at low SoC, full cathode at high SoC).
+ * Temperature multipliers preserved from NMC pouch cell literature. */
 static const double r_table[R_NUM_SOCS][R_NUM_TEMPS] = {
-    { 13.2,  8.3,  5.3,  4.3,  3.8,  3.5 },  /* SoC=5%  */
-    { 10.0,  6.6,  4.3,  3.3,  3.0,  2.8 },  /* SoC=20% */
-    {  9.9,  6.6,  4.3,  3.3,  3.0,  2.8 },  /* SoC=50% */
-    {  9.9,  6.6,  4.3,  3.3,  3.0,  2.8 },  /* SoC=80% */
-    { 11.6,  7.6,  4.8,  3.6,  3.3,  3.1 },  /* SoC=95% */
+    { 15.3,  9.7,  6.2,  5.0,  4.4,  4.1 },  /* SoC=5%  (high — depleted anode) */
+    { 10.9,  7.2,  4.7,  3.6,  3.3,  3.1 },  /* SoC=20% */
+    {  9.9,  6.6,  4.3,  3.3,  3.0,  2.8 },  /* SoC=35% */
+    {  9.3,  6.2,  4.0,  3.1,  2.8,  2.6 },  /* SoC=50% (minimum) */
+    {  9.6,  6.4,  4.2,  3.2,  2.9,  2.7 },  /* SoC=65% */
+    { 10.2,  6.8,  4.4,  3.4,  3.1,  2.9 },  /* SoC=80% */
+    { 13.5,  8.9,  5.6,  4.2,  3.9,  3.6 },  /* SoC=95% (high — full cathode) */
 };
 
 /**
@@ -137,7 +142,7 @@ static const double ocv_soc_bp[OCV_NUM_POINTS] = {
 static const double ocv_val_bp[OCV_NUM_POINTS] = {
     3.000, 3.280, 3.420, 3.480, 3.510, 3.555, 3.590, 3.610,
     3.625, 3.638, 3.650, 3.662, 3.675, 3.690, 3.710, 3.735,
-    3.765, 3.800, 3.845, 3.900, 3.960, 4.030, 4.100, 4.175,
+    3.765, 3.800, 3.845, 3.900, 3.960, 4.030, 4.100, 4.190,
 };
 
 double corvus_ocv_from_soc(double soc)
@@ -249,8 +254,15 @@ void corvus_pack_step(corvus_pack_t *pack, double dt, double current,
     else
         pack->current = current;
 
-    /* Coulomb counting -- Section 2.3 */
-    double delta_soc = (pack->current * dt) / (pack->capacity_ah * 3600.0);
+    /* Coulomb counting -- Section 2.3
+     * Coulombic efficiency: during charge, only 99.8% of current goes to
+     * lithium intercalation (rest is parasitic SEI growth). */
+    double effective_current;
+    if (pack->current > 0.0)  /* charging */
+        effective_current = pack->current * 0.998;
+    else  /* discharging — full coulombic extraction */
+        effective_current = pack->current;
+    double delta_soc = (effective_current * dt) / (pack->capacity_ah * 3600.0);
     pack->soc = clamp_d(pack->soc + delta_soc, 0.0, 1.0);
 
     /* First-order thermal: dT/dt = (I²R + external - cooling) / C_thermal */

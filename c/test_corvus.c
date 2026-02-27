@@ -49,7 +49,7 @@ static void test_ocv_curve(void)
     /* Exact breakpoints from the table */
     ASSERT_NEAR(corvus_ocv_from_soc(0.00), 3.000, 1e-6, "OCV at SoC=0%");
     ASSERT_NEAR(corvus_ocv_from_soc(0.50), 3.675, 1e-6, "OCV at SoC=50%");
-    ASSERT_NEAR(corvus_ocv_from_soc(1.00), 4.175, 1e-6, "OCV at SoC=100%");
+    ASSERT_NEAR(corvus_ocv_from_soc(1.00), 4.190, 1e-6, "OCV at SoC=100%");
     ASSERT_NEAR(corvus_ocv_from_soc(0.20), 3.590, 1e-6, "OCV at SoC=20%");
 
     /* Interpolated mid-point between SoC=0.50 (3.675) and SoC=0.55 (3.690) */
@@ -58,7 +58,7 @@ static void test_ocv_curve(void)
 
     /* Clamped at boundaries */
     ASSERT_NEAR(corvus_ocv_from_soc(-0.1), 3.000, 1e-6, "OCV clamped below 0");
-    ASSERT_NEAR(corvus_ocv_from_soc(1.5),  4.175, 1e-6, "OCV clamped above 1");
+    ASSERT_NEAR(corvus_ocv_from_soc(1.5),  4.190, 1e-6, "OCV clamped above 1");
 }
 
 /* =====================================================================
@@ -68,21 +68,21 @@ static void test_resistance_lookup(void)
 {
     printf("test_resistance_lookup\n");
 
-    /* Exact table point: SoC=50%, T=25°C → 3.3 mΩ/module */
+    /* Exact table point: SoC=50%, T=25°C → 3.1 mΩ/module (U-shape minimum) */
     double r_mod = corvus_module_resistance(25.0, 0.50);
-    ASSERT_NEAR(r_mod * 1e3, 3.3, 0.01, "R_module at 25C/50%");
+    ASSERT_NEAR(r_mod * 1e3, 3.1, 0.01, "R_module at 25C/50%");
 
     /* Pack = 22 modules in series */
     double r_pack = corvus_pack_resistance(25.0, 0.50);
-    ASSERT_NEAR(r_pack * 1e3, 3.3 * 22.0, 0.3, "R_pack at 25C/50%");
+    ASSERT_NEAR(r_pack * 1e3, 3.1 * 22.0, 0.3, "R_pack at 25C/50%");
 
-    /* Cold: SoC=5%, T=-10°C → 13.2 mΩ/module */
+    /* Cold: SoC=5%, T=-10°C → 15.3 mΩ/module */
     r_mod = corvus_module_resistance(-10.0, 0.05);
-    ASSERT_NEAR(r_mod * 1e3, 13.2, 0.01, "R_module at -10C/5%");
+    ASSERT_NEAR(r_mod * 1e3, 15.3, 0.01, "R_module at -10C/5%");
 
-    /* Interpolated: T=17.5°C (midpoint 10-25), SoC=50% → mid(4.3, 3.3)=3.8 */
+    /* Interpolated: T=17.5°C (midpoint 10-25), SoC=50% → mid(4.0, 3.1)=3.55 */
     r_mod = corvus_module_resistance(17.5, 0.50);
-    ASSERT_NEAR(r_mod * 1e3, 3.8, 0.01, "R_module interpolated at 17.5C/50%");
+    ASSERT_NEAR(r_mod * 1e3, 3.55, 0.01, "R_module interpolated at 17.5C/50%");
 }
 
 /* =====================================================================

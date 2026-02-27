@@ -52,8 +52,10 @@ extern "C" {
 #define BMS_NOMINAL_CAPACITY_AH      128.0
 #define BMS_NUM_CELLS_SERIES          (BMS_NUM_MODULES * BMS_CELLS_PER_MODULE) /* 308 */
 
-/* Thermal parameters -- RESEARCH.md */
-#define BMS_THERMAL_MASS         1386000.0     /* J/°C */
+/* Thermal parameters -- RESEARCH.md
+ * Composite: 70% cell mass (1050 J/kg/K) + 30% non-cell (500 J/kg/K)
+ * 22 × 42 kg cells × 1050 + (22 × 18 kg + 200 kg) × 500 ≈ 1,268,000 J/°C */
+#define BMS_THERMAL_MASS         1268000.0     /* J/°C */
 #define BMS_THERMAL_COOLING_COEFF  800.0       /* W/°C */
 #define BMS_AMBIENT_TEMP            40.0       /* °C */
 

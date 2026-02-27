@@ -32,7 +32,7 @@
 
 #define NUM_PACKS   3
 _Static_assert(NUM_PACKS <= BMS_MAX_PACKS, "NUM_PACKS exceeds BMS_MAX_PACKS");
-#define MAX_ROWS    2000
+#define MAX_ROWS    3000
 
 /* CSV row storage -- static allocation, no malloc */
 typedef struct {
@@ -271,18 +271,34 @@ int main(void)
         printf("  OC warning not triggered in 40s (check timer)\n");
     printf("\n");
 
-    /* ── PHASE 5: Temperature ramp on Pack 3 (t=440..680s) ── */
-    printf("[Phase 5] Temperature ramp on Pack 3 -- warning, fault, HW safety\n");
+    /* ── PHASE 5: Cooling system failure on Pack 3 during heavy charging ── */
+    /* Realistic maritime incident: fan failure reduces cooling from 800 to 50 W/°C
+     * (natural convection only). High current charging + adjacent machinery heat. */
+    double reduced_cooling = 50.0;   /* W/°C, natural convection only */
+    double adjacent_heat = 50000.0;  /* 50 kW from adjacent machinery */
+
+    printf("[Phase 5] Cooling system failure on Pack 3 -- fan failure during heavy charging\n");
+    printf("  Normal cooling: %.0f W/C -> Fan failure: %.0f W/C\n",
+           BMS_THERMAL_COOLING_COEFF, reduced_cooling);
+    printf("  Adjacent machinery heat: %.0f kW\n", adjacent_heat / 1e3);
     printf("  Warning: %.0fC, Fault: %.0fC, HW Safety: %.0fC\n",
            BMS_SE_OVER_TEMP_WARNING, BMS_SE_OVER_TEMP_FAULT, BMS_HW_SAFETY_OVER_TEMP);
 
     int warn_logged = 0, fault_logged = 0;
-    double external_heat_w = 500000.0;  /* 500 kW */
 
-    for (int step = 0; step < 240; step++) {
-        double current = array.controllers[2].fault_latched ? 80.0 : 100.0;
+    for (int step = 0; step < 700; step++) {
+        double current = array.controllers[2].fault_latched ? 0.0 : 900.0;
         memset(ext_heat, 0, sizeof(ext_heat));
-        ext_heat[2] = external_heat_w;
+
+        if (!array.controllers[2].fault_latched) {
+            /* Simulate fan failure: compensate built-in cooling to achieve
+             * effective cooling of reduced_cooling W/°C */
+            double cooling_comp = (BMS_THERMAL_COOLING_COEFF - reduced_cooling) *
+                                  (array.controllers[2].pack.temperature - BMS_AMBIENT_TEMP);
+            ext_heat[2] = cooling_comp + adjacent_heat;
+        }
+        /* After fault: fan restored, no external heat (normal cooling resumes) */
+
         corvus_array_step(&array, dt, current, ext_heat);
         record(t, &array);
 
@@ -298,26 +314,34 @@ int main(void)
                    t, array.controllers[2].fault_message);
             printf("    Contactors OPEN, limits ZERO\n");
             fault_logged = 1;
-            external_heat_w = 0.0;
         }
+
+        if (fault_logged)
+            break;
         t += dt;
     }
+
+    /* Let the fault state settle */
+    for (int step = 0; step < 10; step++) {
+        corvus_array_step(&array, dt, 80.0, NULL);
+        record(t, &array);
+        t += dt;
+    }
+
     printf("  Pack 3 mode: %s, temp: %.1fC\n\n",
            bms_mode_name(array.controllers[2].mode),
            array.controllers[2].pack.temperature);
 
     /* ── PHASE 6: Temperature hysteresis demo ── */
-    printf("[Phase 6] Warning hysteresis -- hold time prevents premature clear\n");
+    printf("[Phase 6] Warning hysteresis -- cooling restored, hold time prevents premature clear\n");
     printf("  Warning hold time: %.0fs\n", BMS_WARNING_HOLD_TIME);
 
     for (int step = 0; step < 15; step++) {
-        memset(ext_heat, 0, sizeof(ext_heat));
-        ext_heat[2] = -200000.0;
-        corvus_array_step(&array, dt, 80.0, ext_heat);
+        corvus_array_step(&array, dt, 80.0, NULL);  /* Normal cooling resumes */
         record(t, &array);
         t += dt;
     }
-    printf("  Pack 3 temp after slight cooling: %.1fC\n",
+    printf("  Pack 3 temp after cooling restored: %.1fC\n",
            array.controllers[2].pack.temperature);
     printf("  Pack 3 warning still active: %s\n\n",
            array.controllers[2].has_warning ? "true" : "false");
@@ -331,12 +355,10 @@ int main(void)
            array.controllers[2].time_in_safe_state,
            result ? "OK" : "DENIED");
 
-    /* Cool Pack 3 via emergency ventilation */
-    printf("  Cooling Pack 3 via emergency ventilation (-100 kW)...\n");
-    for (int step = 0; step < 120; step++) {
-        memset(ext_heat, 0, sizeof(ext_heat));
-        ext_heat[2] = -100000.0;
-        corvus_array_step(&array, dt, 80.0, ext_heat);
+    /* Cool Pack 3 via normal cooling (fan restored) */
+    printf("  Waiting for Pack 3 to cool below fault threshold (normal cooling)...\n");
+    for (int step = 0; step < 200; step++) {
+        corvus_array_step(&array, dt, 80.0, NULL);
         record(t, &array);
         t += dt;
     }
@@ -349,10 +371,8 @@ int main(void)
     printf("  Reset attempt: %s\n", result ? "SUCCESS" : "DENIED (need more hold time)");
 
     if (!result) {
-        for (int step = 0; step < 80; step++) {
-            memset(ext_heat, 0, sizeof(ext_heat));
-            ext_heat[2] = -50000.0;
-            corvus_array_step(&array, dt, 80.0, ext_heat);
+        for (int step = 0; step < 120; step++) {
+            corvus_array_step(&array, dt, 80.0, NULL);
             record(t, &array);
             t += dt;
         }
