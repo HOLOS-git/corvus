@@ -10,6 +10,10 @@ A single-file Python implementation of the Corvus Energy Orca ESS Pack ⇄ EMS i
 
 **Reference:** Corvus Energy Orca ESS integrator documentation (1007768 Rev V for traceability)
 
+## At a Glance
+
+![Corvus Demo Output](corvus_plot.png)
+
 ## What This Is
 
 A runnable demo that implements the core Pack Controller behaviors documented in Corvus Energy Orca ESS integrator documentation, driving them with a physically-grounded equivalent-circuit battery model. Every behavior cites the exact manual section it implements.

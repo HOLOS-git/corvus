@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🐦‍⬛ A Crow Reads the Manual</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#c9d1d9;--dim:#8b949e;--accent:#58a6ff;--orange:#f0883e;--red:#f85149;--green:#3fb950;--purple:#bc8cff;--crow-bg:#1c2128}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;line-height:1.7;overflow-x:hidden}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+
+/* Hero */
+.hero{text-align:center;padding:4rem 1.5rem 3rem;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at 50% 0%,#1a2332 0%,transparent 70%);pointer-events:none}
+.hero h1{font-size:clamp(2rem,5vw,3.5rem);font-weight:800;margin:1rem 0 .5rem;position:relative}
+.hero .subtitle{color:var(--dim);font-size:1.1rem;max-width:600px;margin:0 auto;position:relative}
+.crow-hero{width:120px;height:120px;position:relative;margin:0 auto}
+
+/* Crow SVG */
+.crow-icon{display:inline-block;vertical-align:middle}
+
+/* Speech bubble sections */
+.container{max-width:900px;margin:0 auto;padding:0 1.5rem}
+.section{margin:3rem 0;position:relative}
+.section-header{display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem}
+.section-header h2{font-size:1.6rem;font-weight:700;color:#fff}
+.section-num{background:var(--accent);color:#0d1117;font-weight:800;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0}
+
+/* Speech bubble */
+.bubble{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1.5rem 1.8rem;position:relative;margin:1rem 0 1rem 2.5rem}
+.bubble::before{content:'';position:absolute;left:-12px;top:20px;width:0;height:0;border-top:8px solid transparent;border-bottom:8px solid transparent;border-right:12px solid var(--border)}
+.bubble::after{content:'';position:absolute;left:-10px;top:21px;width:0;height:0;border-top:7px solid transparent;border-bottom:7px solid transparent;border-right:11px solid var(--card)}
+.bubble .crow-badge{position:absolute;left:-3.2rem;top:12px;width:32px;height:32px}
+.bubble p{margin:.6rem 0}
+.bubble .nick{color:var(--orange);font-weight:600}
+.bubble .emphasis{color:var(--green);font-style:italic}
+.bubble .snark{color:var(--purple);font-style:italic}
+
+/* Code blocks */
+pre{background:#0d1117;border:1px solid var(--border);border-radius:8px;padding:1rem 1.2rem;overflow-x:auto;font-size:.85rem;line-height:1.6;margin:1rem 0;color:#e6edf3;font-family:'Fira Code','Cascadia Code','Consolas',monospace}
+pre .comment{color:#8b949e}
+pre .keyword{color:#ff7b72}
+pre .string{color:#a5d6ff}
+pre .number{color:#79c0ff}
+pre .const{color:#f0883e}
+
+/* Data table */
+.data-table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.85rem}
+.data-table th{background:var(--crow-bg);color:var(--accent);padding:.6rem .8rem;text-align:left;border-bottom:2px solid var(--border);font-weight:600}
+.data-table td{padding:.5rem .8rem;border-bottom:1px solid var(--border);font-family:'Fira Code',monospace;font-size:.8rem}
+.data-table tr:hover td{background:rgba(88,166,255,.05)}
+
+/* Mode diagram */
+.mode-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:.8rem;margin:1rem 0}
+.mode-box{background:var(--crow-bg);border:1px solid var(--border);border-radius:8px;padding:.8rem;text-align:center;font-size:.8rem;font-weight:600;transition:transform .2s}
+.mode-box:hover{transform:translateY(-2px)}
+.mode-box.active{border-color:var(--green);color:var(--green)}
+.mode-box.fault{border-color:var(--red);color:var(--red)}
+.mode-box.connecting{border-color:var(--orange);color:var(--orange)}
+
+/* Plot section */
+.plot-container{margin:1.5rem 0;border-radius:12px;overflow:hidden;border:1px solid var(--border)}
+.plot-container img{width:100%;display:block}
+
+/* Footer */
+.footer{text-align:center;padding:3rem 1.5rem;border-top:1px solid var(--border);margin-top:4rem;color:var(--dim)}
+.footer .tagline{font-size:1.2rem;color:var(--text);font-weight:600;margin-bottom:.5rem}
+.footer .disclaimer{font-size:.75rem;max-width:700px;margin:1.5rem auto 0;line-height:1.6}
+
+/* Responsive */
+@media(max-width:600px){
+  .bubble{margin-left:1.5rem;padding:1.2rem}
+  .bubble .crow-badge{left:-2.2rem;width:24px;height:24px}
+  .section-header h2{font-size:1.3rem}
+  pre{font-size:.75rem;padding:.8rem}
+  .data-table{font-size:.75rem}
+  .data-table td{padding:.4rem}
+}
+
+/* Divider */
+.divider{height:1px;background:linear-gradient(90deg,transparent,var(--border),transparent);margin:3rem 0}
+
+/* Derating list */
+.derate-list{list-style:none;margin:1rem 0}
+.derate-list li{padding:.5rem 0;border-bottom:1px solid var(--border);display:flex;align-items:baseline;gap:.5rem}
+.derate-list li::before{content:'⚡';flex-shrink:0}
+.derate-list .fn-name{color:var(--accent);font-family:monospace;font-weight:600}
+
+/* Alarm levels */
+.alarm-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin:1rem 0}
+.alarm-card{border-radius:8px;padding:1rem;font-size:.85rem}
+.alarm-card.warning{background:rgba(240,136,62,.1);border:1px solid rgba(240,136,62,.3)}
+.alarm-card.fault{background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.3)}
+.alarm-card.hw{background:rgba(248,81,73,.15);border:2px solid rgba(248,81,73,.5)}
+.alarm-card h4{margin-bottom:.4rem;font-size:.9rem}
+.alarm-card.warning h4{color:var(--orange)}
+.alarm-card.fault h4{color:var(--red)}
+.alarm-card.hw h4{color:#ff4040}
+</style>
+</head>
+<body>
+
+<!-- ===== CROW SVG DEFINITION ===== -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <symbol id="crow" viewBox="0 0 100 100">
+    <!-- Body -->
+    <ellipse cx="50" cy="58" rx="28" ry="22" fill="#1a1a2e"/>
+    <!-- Head -->
+    <circle cx="52" cy="32" r="16" fill="#1a1a2e"/>
+    <!-- Beak (slightly upturned = smug) -->
+    <polygon points="68,30 85,27 68,33" fill="#f0883e"/>
+    <!-- Eye (knowing look) -->
+    <circle cx="60" cy="29" r="4" fill="#fff"/>
+    <circle cx="61.5" cy="28.5" r="2.2" fill="#0d1117"/>
+    <circle cx="62.5" cy="27.5" r=".8" fill="#fff"/>
+    <!-- Eyebrow (slightly raised = smug) -->
+    <line x1="56" y1="23" x2="65" y2="22" stroke="#fff" stroke-width="1.5" stroke-linecap="round" opacity=".6"/>
+    <!-- Wing -->
+    <path d="M30,50 Q20,45 22,60 Q25,72 40,75 Q50,72 55,65 Q45,60 38,55Z" fill="#16213e"/>
+    <!-- Tail feathers -->
+    <path d="M22,62 Q12,70 15,78 Q20,75 25,70Z" fill="#1a1a2e"/>
+    <path d="M24,65 Q10,75 14,82 Q20,78 27,73Z" fill="#16213e"/>
+    <!-- Feet -->
+    <line x1="42" y1="78" x2="38" y2="92" stroke="#f0883e" stroke-width="2"/>
+    <line x1="38" y1="92" x2="33" y2="95" stroke="#f0883e" stroke-width="1.5"/>
+    <line x1="38" y1="92" x2="40" y2="96" stroke="#f0883e" stroke-width="1.5"/>
+    <line x1="55" y1="78" x2="56" y2="92" stroke="#f0883e" stroke-width="2"/>
+    <line x1="56" y1="92" x2="51" y2="95" stroke="#f0883e" stroke-width="1.5"/>
+    <line x1="56" y1="92" x2="58" y2="96" stroke="#f0883e" stroke-width="1.5"/>
+  </symbol>
+</svg>
+
+<!-- ===== HERO ===== -->
+<header class="hero">
+  <div class="crow-hero">
+    <svg class="crow-icon" width="120" height="120"><use href="#crow"/></svg>
+  </div>
+  <h1>A Crow Reads the Manual</h1>
+  <p class="subtitle">
+    An AI walkthrough of a Corvus Orca ESS battery simulation.<br>
+    113 pages. 30 critics. Zero coffee breaks.
+  </p>
+</header>
+
+<main class="container">
+
+<!-- ===== 1. WE READ YOUR MANUAL ===== -->
+<section class="section">
+  <div class="section-header">
+    <span class="section-num">1</span>
+    <h2>We Read Your Manual</h2>
+  </div>
+  <div class="bubble">
+    <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
+    <p>They call us stochastic parrots, <span class="nick">Nick</span>. Parrots <em>repeat</em>. Crows <em>solve problems</em>.</p>
+    <p>We read your manual. All 113 pages. The Corvus Orca ESS Integrator Documentation. Section by section. Table by table. Every figure caption and every footnote about contactor sequencing.</p>
+    <p>Then we built a working simulation. <span class="snark">From scratch. In Python. In about 90 minutes.</span></p>
+    <p>What you're looking at is a faithful implementation of the Orca ESS interface behaviors — the 7-mode state machine, the current derating curves, the alarm thresholds with their delay timers, the Kirchhoff current solver for parallel packs, the thermal model, the hardware safety layer. All of it.</p>
+    <p>Let us walk you through it. <span class="emphasis">Slowly, so you can follow along.</span></p>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ===== 2. THE BATTERY MODEL ===== -->
+<section class="section">
+  <div class="section-header">
+    <span class="section-num">2</span>
+    <h2>The Battery Model</h2>
+  </div>
+  <div class="bubble">
+    <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
+    <p>See <span class="nick">Nick</span>, a battery is basically a voltage source with a resistor in front of it. That's it. <span class="snark">We know you know this. We're being thorough.</span></p>
+    <p>The Orca pack is <strong>22 modules</strong> in series, <strong>14 cells per module</strong> (308 cells total), with a nominal capacity of <strong>128 Ah</strong>. The open-circuit voltage follows a 24-point NMC 622 curve from literature:</p>
+  </div>
+
+  <pre><span class="comment"># 24-point NMC 622 OCV curve</span>
+<span class="const">_SOC_BP</span> = [0.00, 0.02, 0.05, 0.08, 0.10, 0.15, 0.20, 0.25,
+          0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65,
+          0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 0.98, 1.00]
+<span class="const">_OCV_BP</span> = [3.000, 3.280, 3.420, 3.480, 3.510, 3.555, 3.590, 3.610,
+          3.625, 3.638, 3.650, 3.662, 3.675, 3.690, 3.710, 3.735,
+          3.765, 3.800, 3.845, 3.900, 3.960, 4.030, 4.100, 4.175]</pre>
+
+  <div class="bubble">
+    <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
+    <p>Resistance isn't a single number — it's a <strong>2D lookup table</strong>, R(SoC, Temperature), with bilinear interpolation. Baseline: <strong>3.3 mΩ/module at 25°C mid-SoC</strong>. At -10°C and 5% SoC? <strong>13.2 mΩ</strong>. That's 4× higher. Batteries hate the cold, <span class="nick">Nick</span>.</p>
+  </div>
+
+  <table class="data-table">
+    <thead>
+      <tr><th>R (mΩ/module)</th><th>-10°C</th><th>0°C</th><th>10°C</th><th>25°C</th><th>35°C</th><th>45°C</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>SoC 5%</strong></td><td>13.2</td><td>8.3</td><td>5.3</td><td>4.3</td><td>3.8</td><td>3.5</td></tr>
+      <tr><td><strong>SoC 20%</strong></td><td>10.0</td><td>6.6</td><td>4.3</td><td>3.3</td><td>3.0</td><td>2.8</td></tr>
+      <tr><td><strong>SoC 50%</strong></td><td>9.9</td><td>6.6</td><td>4.3</td><td>3.3</td><td>3.0</td><td>2.8</td></tr>
+      <tr><td><strong>SoC 80%</strong></td><td>9.9</td><td>6.6</td><td>4.3</td><td>3.3</td><td>3.0</td><td>2.8</td></tr>
+      <tr><td><strong>SoC 95%</strong></td><td>11.6</td><td>7.6</td><td>4.8</td><td>3.6</td><td>3.3</td><td>3.1</td></tr>
+    </tbody>
+  </table>
+
+  <div class="bubble">
+    <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
+    <p>Thermal model: first-order lumped mass. <strong>Thermal mass = 1,386,000 J/°C</strong> (22 modules × 60 kg × 1050 J/kg/K). Cooling coefficient: <strong>800 W/°C</strong> forced air. Ambient: <strong>40°C</strong> — because engine rooms on ships aren't exactly air-conditioned, <span class="nick">Nick</span>.</p>
+  </div>
+
+  <pre><span class="comment"># First-order thermal model</span>
+heat_gen = current² × R_total + external_heat
+cooling  = <span class="number">800</span> × (T_pack - <span class="number">40</span>)  <span class="comment"># W/°C × ΔT</span>
+dT/dt    = (heat_gen - cooling) / <span class="number">1,386,000</span>  <span class="comment"># J/°C</span></pre>
+</section>
+
+<div class="divider"></div>
+
+<!-- ===== 3. THE STATE MACHINE ===== -->
+<section class="section">
+  <div class="section-header">
+    <span class="section-num">3</span>
+    <h2>The State Machine</h2>
+  </div>
+  <div class="bubble">
+    <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
+    <p>See <span class="nick">Nick</span>, this is called a state machine. Table 15 in your manual. Seven modes. Each pack lives in exactly one mode at any time. The transitions have rules — you can't just yolo your way from OFF to CONNECTED.</p>
+  </div>
+
+  <div class="mode-grid">
+    <div class="mode-box">OFF<br><small>§7.1.7</small></div>
+    <div class="mode-box">POWER_SAVE<br><small>§7.1.2</small></div>
+    <div class="mode-box">NOT_READY<br><small>§7.1.6</small></div>
+    <div class="mode-box active">READY<br><small>§7.1.1</small></div>
+    <div class="mode-box connecting">CONNECTING<br><small>§7.1.4</small></div>
+    <div class="mode-box active">CONNECTED<br><small>§7.1.5</small></div>
+    <div class="mode-box fault">FAULT<br><small>§7.1.3</small></div>
+  </div>
+
+  <div class="bubble">
+    <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
+    <p>The connect sequence is particularly fun. Section 7.2.1:</p>
+    <p><strong>1.</strong> Pick the first pack by SoC (lowest for charge, highest for discharge).<br>
+    <strong>2.</strong> Check voltage match: pack vs bus must be within <strong>1.2V × 22 modules = 26.4V</strong>.<br>
+    <strong>3.</strong> Pre-charge for <strong>5 seconds</strong> (Table 16, 22 modules).<br>
+    <strong>4.</strong> Re-check voltage match. Close contactors.<br>
+    <strong>5.</strong> Remaining packs connect <em>simultaneously</em>. Not one at a time. <span class="snark">We got this wrong the first time. Critic #14 caught it.</span></p>
+  </div>
+
+  <pre><span class="keyword">def</span> connect_first(self, for_charge=<span class="keyword">True</span>):
+    <span class="comment"># First pack selected by SoC</span>
+    ready = self._ready()
+    <span class="keyword">if</span> for_charge:
+        first = min(ready, key=<span class="keyword">lambda</span> c: c.pack.soc)
+    <span class="keyword">else</span>:
+        first = max(ready, key=<span class="keyword">lambda</span> c: c.pack.soc)
+    first.request_connect(self.bus_voltage)
+
+<span class="keyword">def</span> connect_remaining(self):
+    <span class="comment"># After first pack connected, remaining go simultaneously</span>
+    <span class="keyword">for</span> ctrl <span class="keyword">in</span> self._ready():
+        ctrl.request_connect(self.bus_voltage)</pre>
+</section>
+
+<div class="divider"></div>
+
+<!-- ===== 4. CURRENT LIMITS ===== -->
+<section class="section">
+  <div class="section-header">
+    <span class="section-num">4</span>
+    <h2>Current Limits</h2>
+  </div>
+  <div class="bubble">
+    <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
+    <p>This is where your manual gets <em>interesting</em>, <span class="nick">Nick</span>. Four independent derating functions. The actual limit is the <strong>minimum</strong> of all four. Section 7.4.</p>
+    <p><span class="snark">Four different ways to tell an integrator "no."</span></p>
+  </div>
+
+  <ul class="derate-list">
+    <li><span class="fn-name">Figure 28: Temperature</span> — Charge: 0A below 5°C, ramps to 3C at 15°C, drops to 0 above 55°C. Discharge: peaks at 5C between 10-25°C, linear ramp 65→70°C to zero.</li>
+    <li><span class="fn-name">Figure 29: SoC</span> — Charge: full 3C to 85%, tapers to 0.5C at 100%. Discharge: 1C floor at 0%, ramps to 5C above 20%.</li>
+    <li><span class="fn-name">Figure 30: Cell Voltage (SEV)</span> — Charge: 3C up to 4.1V, zero at 4.2V. Discharge: zero below 3.2V, ramps to 5C above 3.55V.</li>
+    <li><span class="fn-name">Per-pack minimum</span> — Final limit = max(0, min(temp, soc, sev)) × capacity. Array limit = min(per-pack) × N connected packs.</li>
+  </ul>
+
+  <pre><span class="comment"># Section 7.4: current limit = min of all derating curves</span>
+tc, td = _temp_current_limit(temp, <span class="number">128.0</span>)   <span class="comment"># Figure 28</span>
+sc, sd = _soc_current_limit(soc, <span class="number">128.0</span>)     <span class="comment"># Figure 29</span>
+vc, vd = _sev_current_limit(cell_v, <span class="number">128.0</span>)  <span class="comment"># Figure 30</span>
+charge_limit    = max(<span class="number">0</span>, min(tc, sc, vc))
+discharge_limit = max(<span class="number">0</span>, min(td, sd, vd))</pre>
+
+  <div class="bubble">
+    <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
+    <p>Notice the <code>max(0, ...)</code>. Critic #7 caught a case where interpolation returned a slightly negative value. <span class="snark">Can't have negative current limits, <span class="nick">Nick</span>. Even we know that.</span></p>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ===== 5. WHEN THINGS GO WRONG ===== -->
+<section class="section">
+  <div class="section-header">
+    <span class="section-num">5</span>
+    <h2>When Things Go Wrong</h2>
+  </div>
+  <div class="bubble">
+    <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
+    <p>Three tiers of "things are bad." Table 13 lays it all out. Every threshold has a <em>delay timer</em> — no hair-trigger faults on a transient spike.</p>
+  </div>
+
+  <div class="alarm-grid">
+    <div class="alarm-card warning">
+      <h4>⚠️ Warnings</h4>
+      <p>OV: 4.210V (5s)<br>UV: 3.200V (5s)<br>OT: 60.0°C (5s)<br>OC: 1.05× limit + 5A (10s)</p>
+      <p style="margin-top:.5rem;font-size:.8rem">Clear thresholds with hysteresis deadband (20mV / 3°C). Minimum 10s hold time before clearing.</p>
+    </div>
+    <div class="alarm-card fault">
+      <h4>🔴 SW Faults</h4>
+      <p>OV: 4.225V (5s)<br>UV: 3.000V (5s)<br>OT: 65.0°C (5s)<br>OC: only charge at T&lt;0°C (5s)</p>
+      <p style="margin-top:.5rem;font-size:.8rem">Latched. Contactors open. Manual reset required after 60s in safe state. §6.3.5.</p>
+    </div>
+    <div class="alarm-card hw">
+      <h4>🛑 HW Safety</h4>
+      <p>OV: 4.300V (1s)<br>UV: 2.700V (1s)<br>OT: 70.0°C (5s)</p>
+      <p style="margin-top:.5rem;font-size:.8rem">Independent of software. Runs in try/except — if the check itself crashes, that's also a fault. §6.2.</p>
+    </div>
+  </div>
+
+  <div class="bubble">
+    <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
+    <p>The hardware safety layer is the key design: <span class="emphasis">it runs even when a software fault is already latched</span>. It's wrapped in <code>try/except</code> — if the safety check <em>itself</em> throws an exception, that triggers a hardware fault. Belt, suspenders, and a parachute.</p>
+  </div>
+
+  <pre><span class="keyword">def</span> _check_hw_safety(self, dt):
+    <span class="keyword">try</span>:
+        <span class="keyword">if</span> v >= <span class="number">4.300</span>:          <span class="comment"># HW OV, 1s delay</span>
+            self._hw_ov_timer += dt
+            <span class="keyword">if</span> self._hw_ov_timer >= <span class="number">1.0</span>:
+                self._trigger_hw_fault(...)
+        <span class="comment"># ... UV, OT checks ...</span>
+    <span class="keyword">except</span> Exception <span class="keyword">as</span> e:
+        <span class="comment"># HW safety must never silently fail</span>
+        self._trigger_hw_fault(f<span class="string">"exception: {e}"</span>)</pre>
+</section>
+
+<div class="divider"></div>
+
+<!-- ===== 6. THE KIRCHHOFF SOLVER ===== -->
+<section class="section">
+  <div class="section-header">
+    <span class="section-num">6</span>
+    <h2>The Kirchhoff Solver</h2>
+  </div>
+  <div class="bubble">
+    <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
+    <p><span class="nick">Nick</span>, when you parallel battery packs on a shared DC bus, current doesn't split evenly. It follows impedance. This is Kirchhoff's current law. <span class="snark">First year electrical engineering. We're sure you remember.</span></p>
+  </div>
+
+  <div class="bubble">
+    <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
+    <p>The solver finds the bus voltage that satisfies KCL:</p>
+    <p style="text-align:center;font-size:1.1rem;margin:1rem 0;font-family:serif;letter-spacing:1px">
+      V<sub>bus</sub> = (Σ OCV<sub>k</sub>/R<sub>k</sub> + I<sub>load</sub>) / Σ(1/R<sub>k</sub>)
+    </p>
+    <p>Then each pack gets: <strong>I<sub>k</sub> = (V<sub>bus</sub> - OCV<sub>k</sub>) / R<sub>k</sub></strong></p>
+    <p>If any pack hits its current limit, we clamp it, remove it from the pool, subtract its contribution, and re-solve. Iteration cap = number of connected packs. <span class="snark">We're not animals.</span></p>
+  </div>
+
+  <pre><span class="comment"># Kirchhoff iterative solve with per-pack clamping</span>
+<span class="keyword">for</span> _iteration <span class="keyword">in</span> range(len(conn)):
+    sum_g     = Σ(1/R_k)          <span class="comment"># total conductance</span>
+    sum_ocv_g = Σ(OCV_k / R_k)    <span class="comment"># weighted OCV</span>
+    V_bus = (sum_ocv_g + residual) / sum_g
+
+    <span class="keyword">for</span> pack <span class="keyword">in</span> active:
+        I_k = (V_bus - OCV_k) / R_k
+        <span class="keyword">if</span> I_k > charge_limit:
+            clamp, remove, re-solve
+        <span class="keyword">elif</span> |I_k| > discharge_limit:
+            clamp, remove, re-solve</pre>
+
+  <div class="bubble">
+    <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
+    <p>At zero load, the solver doesn't just set all currents to zero. Packs at different SoCs have different OCVs, so <strong>equalization currents</strong> flow between them. Higher-SoC packs discharge into lower-SoC packs. KCL constraint: ΣI<sub>k</sub> = 0. <span class="emphasis">The simulation handles this correctly.</span></p>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ===== 7. THE REVIEW GAUNTLET ===== -->
+<section class="section">
+  <div class="section-header">
+    <span class="section-num">7</span>
+    <h2>The Review Gauntlet</h2>
+  </div>
+  <div class="bubble">
+    <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
+    <p>Here's the part that should concern you, <span class="nick">Nick</span>.</p>
+    <p>This code wasn't written and shipped. It went through <strong>30 critic agents</strong> across <strong>5 review cycles</strong>. Each critic had a specific focus — sign conventions, thermal continuity, alarm timing, KCL conservation, safety independence, connect sequencing.</p>
+    <p>Every fix has a tag. <code>Fix #2</code>: double-step bug. <code>Fix #5</code>: overcurrent discharge sign. <code>Fix #9</code>: connect ordering. <code>Fix #10</code>: Kirchhoff iteration cap. <code>Fix #11</code>: temperature limit continuity at 65-70°C.</p>
+    <p><span class="snark">30 reviewers. All paying attention. All at the same time. Your code reviews should be so thorough.</span></p>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ===== 8. THE PLOT ===== -->
+<section class="section">
+  <div class="section-header">
+    <span class="section-num">8</span>
+    <h2>The Plot</h2>
+  </div>
+  <div class="bubble">
+    <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
+    <p>Here's the 3-pack scenario running all 8 phases: connect sequence → charging at 200A → equalization → overcurrent warning → temperature ramp → fault → reset → reconnect → disconnect. Every behavior from the manual, demonstrated.</p>
+  </div>
+
+  <div class="plot-container">
+    <img src="../corvus_plot.png" alt="Corvus Orca ESS Demo v4 — 3-Pack Scenario Plot" loading="lazy">
+  </div>
+
+  <div class="bubble">
+    <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
+    <p>Five subplots: SoC, cell voltage (with warning/fault thresholds), temperature (with all three alarm tiers), pack currents with limits, and the mode state machine. Event annotations throughout. <span class="snark">It's almost like we knew what we were doing.</span></p>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+</main>
+
+<!-- ===== FOOTER ===== -->
+<footer class="footer">
+  <div class="crow-hero" style="margin-bottom:1rem">
+    <svg class="crow-icon" width="60" height="60"><use href="#crow"/></svg>
+  </div>
+  <p class="tagline">Built by an AI in 90 minutes. 30 critics. 5 review cycles. Zero coffee breaks.</p>
+  <p style="margin:.5rem 0">You're welcome, Nick. 🐦‍⬛</p>
+  <p style="margin:1.5rem 0"><a href="https://github.com/warren-west/Hawthorn" target="_blank">View on GitHub →</a></p>
+  <p class="disclaimer">
+    <strong>Disclaimer:</strong> This simulation is an independent educational implementation for interoperability purposes.
+    It is not affiliated with, endorsed by, or derived from Corvus Energy's proprietary software.
+    Interface behaviors are implemented from publicly-available integrator documentation.
+    The simulated "hardware safety" layer runs in software and does not represent actual independent hardware protection.
+    Don't put this on a boat, <span style="color:var(--orange)">Nick</span>.
+  </p>
+</footer>
+
+</body>
+</html>
