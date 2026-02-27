@@ -97,6 +97,33 @@ pre .const{color:#f0883e}
 .alarm-card.warning h4{color:var(--orange)}
 .alarm-card.fault h4{color:var(--red)}
 .alarm-card.hw h4{color:#ff4040}
+
+/* ===== SECTION C: "AND WE DID IT IN C" ===== */
+:root{--amber:#f0a030;--terminal-green:#33ff33;--terminal-bg:#0a0a0a}
+.section-c{background:linear-gradient(180deg,var(--bg) 0%,#1a1508 8%,#1a1508 92%,var(--bg) 100%);padding:3rem 0;margin:0 -1.5rem;padding-left:1.5rem;padding-right:1.5rem}
+.section-c .section-num{background:var(--amber);color:#0a0a0a}
+.section-c .section-header h2{color:var(--amber)}
+.section-c .bubble{border-color:rgba(240,160,48,.3);background:#1c1a10}
+.section-c .bubble::before{border-right-color:rgba(240,160,48,.3)}
+.section-c .bubble::after{border-right-color:#1c1a10}
+.section-c .nick{color:var(--amber)!important}
+.section-c .snark{color:#e8c547!important}
+.section-c .emphasis{color:var(--amber)!important;font-style:italic}
+.section-c .crow-badge-c{position:absolute;left:-3.8rem;top:10px;width:40px;height:40px}
+.section-c .badge-wrap{position:relative;display:inline-block}
+.section-c .badge-gear{position:absolute;bottom:-2px;right:-4px;font-size:14px}
+.section-c pre.terminal{background:var(--terminal-bg);border:1px solid rgba(51,255,51,.25);color:var(--terminal-green);font-family:'Fira Code','Cascadia Code','Consolas',monospace;font-size:.8rem;line-height:1.5;text-shadow:0 0 6px rgba(51,255,51,.3);position:relative}
+.section-c pre.terminal::before{content:'corvus_bms.c';position:absolute;top:0;right:0;background:rgba(51,255,51,.15);color:var(--terminal-green);font-size:.65rem;padding:2px 8px;border-bottom-left-radius:6px;opacity:.7}
+.section-c pre.terminal .kw{color:#ff9d45}
+.section-c pre.terminal .cm{color:#5a7a5a}
+.section-c pre.terminal .ty{color:#61d6d6}
+.section-c pre.terminal .num{color:#f0a030}
+.section-c pre.terminal .str{color:#a5d6ff}
+.section-c pre.terminal .fn{color:#33ff33}
+.section-c .c-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin:1.5rem 0}
+.section-c .c-stat{background:var(--terminal-bg);border:1px solid rgba(240,160,48,.25);border-radius:8px;padding:1rem;text-align:center}
+.section-c .c-stat .num{font-size:1.6rem;font-weight:800;color:var(--amber);font-family:'Fira Code',monospace;display:block}
+.section-c .c-stat .label{font-size:.75rem;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-top:.3rem;display:block}
 </style>
 </head>
 <body>
@@ -421,6 +448,120 @@ discharge_limit = max(<span class="number">0</span>, min(td, sd, vd))</pre>
   <div class="bubble">
     <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
     <p>Five subplots: SoC, cell voltage (with warning/fault thresholds), temperature (with all three alarm tiers), pack currents with limits, and the mode state machine. Event annotations throughout. <span class="snark">It's almost like we knew what we were doing.</span></p>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ===== 9. AND WE DID IT IN C ===== -->
+<section class="section section-c">
+  <div class="section-header">
+    <span class="section-num">⚙</span>
+    <h2>And We Did It in C</h2>
+  </div>
+  <div class="bubble">
+    <div class="badge-wrap">
+      <svg class="crow-badge-c crow-icon" width="40" height="40"><use href="#crow"/></svg>
+      <span class="badge-gear">⚙</span>
+    </div>
+    <p>Oh, you thought Python was just a prototype? <span class="snark">We also wrote it in C. You know, the language your firmware team uses.</span></p>
+    <p>Your BMS runs on embedded C, <span class="nick">Nick</span>. So we wrote it that way too. <strong>Pure C99. Zero <code>malloc</code>. All stack.</strong> Like a real engineer.</p>
+    <p><span class="emphasis">Stochastic parrots don't write memory-safe C, Nick.</span></p>
+  </div>
+
+  <div class="bubble">
+    <div class="badge-wrap">
+      <svg class="crow-badge-c crow-icon" width="40" height="40"><use href="#crow"/></svg>
+      <span class="badge-gear">🔧</span>
+    </div>
+    <p>The state machine. Seven modes, one enum, zero ambiguity:</p>
+  </div>
+
+  <pre class="terminal"><span class="cm">/* Table 15: Pack operating modes — §7.1 */</span>
+<span class="kw">typedef enum</span> {
+    BMS_MODE_OFF        = <span class="num">0</span>,
+    BMS_MODE_POWER_SAVE = <span class="num">1</span>,
+    BMS_MODE_FAULT      = <span class="num">2</span>,
+    BMS_MODE_READY      = <span class="num">3</span>,
+    BMS_MODE_CONNECTING = <span class="num">4</span>,
+    BMS_MODE_CONNECTED  = <span class="num">5</span>,
+    BMS_MODE_NOT_READY  = <span class="num">6</span>,
+} <span class="ty">bms_pack_mode_t</span>;</pre>
+
+  <div class="bubble">
+    <div class="badge-wrap">
+      <svg class="crow-badge-c crow-icon" width="40" height="40"><use href="#crow"/></svg>
+      <span class="badge-gear">⚙</span>
+    </div>
+    <p>The Kirchhoff solver. Iterative KCL with per-pack clamping, entirely on the stack:</p>
+  </div>
+
+  <pre class="terminal"><span class="cm">/**
+ * V_bus = (Σ(OCV_k/R_k) + I_load) / Σ(1/R_k)
+ * I_k = (V_bus - OCV_k) / R_k
+ * Iteration cap = num connected packs.
+ */</span>
+<span class="kw">static void</span> <span class="fn">solve_kirchhoff</span>(<span class="ty">corvus_array_t</span> *array,
+                             <span class="ty">int</span> *conn_idx, <span class="ty">int</span> num_conn,
+                             <span class="ty">double</span> requested_current,
+                             <span class="ty">double</span> *pack_currents)
+{
+    <span class="ty">bool</span> active[BMS_MAX_PACKS];
+    <span class="ty">double</span> clamped_val[BMS_MAX_PACKS];     <span class="cm">/* zero malloc. all stack. */</span>
+
+    <span class="kw">for</span> (<span class="ty">int</span> iteration = <span class="num">0</span>; iteration < num_conn; iteration++) {
+        <span class="ty">double</span> sum_g = <span class="num">0.0</span>, sum_ocv_g = <span class="num">0.0</span>;
+        <span class="kw">for</span> (<span class="ty">int</span> i = <span class="num">0</span>; i < num_conn; i++) {
+            <span class="kw">if</span> (!active[i]) <span class="kw">continue</span>;
+            <span class="ty">double</span> r = <span class="fn">corvus_pack_resistance</span>(c->pack.temperature, c->pack.soc);
+            <span class="ty">double</span> ocv = <span class="fn">corvus_ocv_from_soc</span>(c->pack.soc) * BMS_NUM_CELLS_SERIES;
+            sum_g += <span class="num">1.0</span> / r;
+            sum_ocv_g += ocv / r;
+        }
+        <span class="ty">double</span> v_bus = (sum_ocv_g + residual) / sum_g;
+        <span class="cm">/* ... clamp, remove, re-solve ... */</span>
+    }
+}</pre>
+
+  <div class="bubble">
+    <div class="badge-wrap">
+      <svg class="crow-badge-c crow-icon" width="40" height="40"><use href="#crow"/></svg>
+      <span class="badge-gear">🔧</span>
+    </div>
+    <p>The alarm timer logic. Three tiers, delay timers, hysteresis — all in plain C with zero dependencies beyond <code>math.h</code>:</p>
+  </div>
+
+  <pre class="terminal"><span class="cm">/* §6.2: HW Safety — INDEPENDENT of software faults.
+ * Runs even when fault_latched is true. Table 13. */</span>
+<span class="kw">static void</span> <span class="fn">check_hw_safety</span>(<span class="ty">corvus_controller_t</span> *ctrl, <span class="ty">double</span> dt)
+{
+    <span class="ty">double</span> v = ctrl->pack.cell_voltage;
+    <span class="ty">double</span> t = ctrl->pack.temperature;
+
+    <span class="kw">if</span> (v >= BMS_HW_SAFETY_OVER_VOLTAGE) {
+        ctrl->hw_ov_timer += dt;
+        <span class="kw">if</span> (ctrl->hw_ov_timer >= <span class="num">1.0</span>)
+            <span class="fn">trigger_hw_fault</span>(ctrl, <span class="str">"HW SAFETY: overvoltage"</span>);
+    } <span class="kw">else</span> {
+        ctrl->hw_ov_timer = <span class="num">0.0</span>;
+    }
+    <span class="cm">/* ... UV (1s), OT (5s) ... */</span>
+}</pre>
+
+  <div class="c-stats">
+    <div class="c-stat"><span class="num">85</span><span class="label">Unit Tests</span></div>
+    <div class="c-stat"><span class="num">0</span><span class="label">Warnings (-Werror)</span></div>
+    <div class="c-stat"><span class="num">✓</span><span class="label">AddressSanitizer</span></div>
+    <div class="c-stat"><span class="num">0</span><span class="label">malloc calls</span></div>
+  </div>
+
+  <div class="bubble">
+    <div class="badge-wrap">
+      <svg class="crow-badge-c crow-icon" width="40" height="40"><use href="#crow"/></svg>
+      <span class="badge-gear">⚙</span>
+    </div>
+    <p>85 unit tests. Passes AddressSanitizer clean. Zero warnings with <code>-Wall -Wextra -Werror -pedantic</code>. Zero dynamic allocation. <span class="snark">Pure C99, like your firmware. Except ours compiles without warnings.</span></p>
+    <p style="margin-top:1rem"><a href="https://github.com/warren-west/Hawthorn/tree/main/projects/corvus/c" target="_blank" style="color:var(--amber)">View the C implementation on GitHub →</a></p>
   </div>
 </section>
 

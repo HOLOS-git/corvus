@@ -903,6 +903,9 @@ class ArrayController:
 
         # 2. Solve current distribution
         if conn:
+            # Compute limits BEFORE solving so they're fresh on the first connected timestep
+            self.compute_array_limits()
+
             if requested_current != 0:
                 pack_currents = self._solve_kirchhoff(conn, requested_current)
             else:
