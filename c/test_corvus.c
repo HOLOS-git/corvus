@@ -711,11 +711,17 @@ static void test_input_validation(void)
     corvus_pack_init(&pack, 100, -0.5, 25.0);
     ASSERT_NEAR(pack.soc, 0.0, 1e-9, "SoC clamped to 0.0");
 
-    /* dt=0 should be a no-op */
+    /* dt=0 should return -1 (error) and not modify state */
     corvus_pack_init(&pack, 101, 0.5, 25.0);
     double soc_before = pack.soc;
-    corvus_pack_step(&pack, 0.0, 100.0, true, 0.0);
-    ASSERT_NEAR(pack.soc, soc_before, 1e-9, "dt=0 is a no-op");
+    int rc = corvus_pack_step(&pack, 0.0, 100.0, true, 0.0);
+    ASSERT_EQ_INT(rc, -1, "dt=0 returns -1");
+    ASSERT_NEAR(pack.soc, soc_before, 1e-9, "dt=0 does not modify SoC");
+
+    /* dt<0 should also return -1 */
+    rc = corvus_pack_step(&pack, -1.0, 100.0, true, 0.0);
+    ASSERT_EQ_INT(rc, -1, "dt<0 returns -1");
+    ASSERT_NEAR(pack.soc, soc_before, 1e-9, "dt<0 does not modify SoC");
 }
 
 /* =====================================================================
@@ -755,11 +761,11 @@ static void test_entropic_heating_sign(void)
 {
     printf("test_entropic_heating_sign\n");
 
-    /* At mid-SoC (0.5), dOCV/dT = -0.4 mV/K
+    /* At mid-SoC (0.5), dOCV/dT = -0.35 mV/K (7-segment curve)
      * Discharging (I < 0): Q_rev = I * T_K * dOCV/dT * n_cells
      * I < 0, dOCV/dT < 0 → Q_rev > 0 (exothermic, adds heat) */
     double docv = corvus_docv_dt(0.5);
-    ASSERT_NEAR(docv, -0.4e-3, 1e-6, "dOCV/dT at SoC=0.5");
+    ASSERT_NEAR(docv, -0.35e-3, 1e-6, "dOCV/dT at SoC=0.5");
 
     /* Compare two packs: one with entropic heating (discharge), one idle */
     corvus_pack_t pack_disch, pack_idle;
@@ -776,9 +782,9 @@ static void test_entropic_heating_sign(void)
     ASSERT_TRUE(pack_disch.temperature > pack_idle.temperature,
                 "Discharging pack warmer than idle");
 
-    /* At high SoC (>0.8), dOCV/dT = +0.1 mV/K (endothermic on discharge) */
+    /* At high SoC (0.9), dOCV/dT = +0.05 mV/K (7-segment: 0.85-0.95 range) */
     double docv_high = corvus_docv_dt(0.9);
-    ASSERT_NEAR(docv_high, 0.1e-3, 1e-6, "dOCV/dT at SoC=0.9 is positive");
+    ASSERT_NEAR(docv_high, 0.05e-3, 1e-6, "dOCV/dT at SoC=0.9 is positive");
 }
 
 /* =====================================================================
@@ -826,6 +832,84 @@ static void test_max_temperature_clamp(void)
 }
 
 /* =====================================================================
+ * TEST: dt <= 0 returns error code
+ * ===================================================================== */
+static void test_dt_error_code(void)
+{
+    printf("test_dt_error_code\n");
+
+    corvus_pack_t pack;
+    corvus_pack_init(&pack, 1, 0.5, 25.0);
+
+    int rc = corvus_pack_step(&pack, 0.0, 100.0, true, 0.0);
+    ASSERT_EQ_INT(rc, -1, "dt=0 returns -1");
+
+    rc = corvus_pack_step(&pack, -5.0, 100.0, true, 0.0);
+    ASSERT_EQ_INT(rc, -1, "dt=-5 returns -1");
+
+    rc = corvus_pack_step(&pack, 1.0, 100.0, true, 0.0);
+    ASSERT_EQ_INT(rc, 0, "dt=1 returns 0 (success)");
+}
+
+/* =====================================================================
+ * TEST: Oscillating OV fault -- leaky timer eventually trips
+ * ===================================================================== */
+static void test_oscillating_ov_fault(void)
+{
+    printf("test_oscillating_ov_fault\n");
+
+    corvus_controller_t ctrl;
+    corvus_controller_init(&ctrl, 1, 0.50, 25.0);
+    double bus_v = ctrl.pack.pack_voltage;
+
+    /* Alternate: 2s above OV fault threshold, 2s just below, repeat 20 times.
+     * Each 2s above adds 2.0 to timer. Each 2s below decays by 2*0.5=1.0.
+     * Net gain per cycle: +1.0. After 5 cycles, timer reaches 5.0 → fault. */
+    bool faulted = false;
+    for (int cycle = 0; cycle < 20 && !faulted; cycle++) {
+        /* 2s above threshold */
+        ctrl.pack.cell_voltage = BMS_SE_OVER_VOLTAGE_FAULT + 0.01;
+        for (int i = 0; i < 2; i++) {
+            corvus_controller_step(&ctrl, 1.0, bus_v);
+            if (ctrl.fault_latched) { faulted = true; break; }
+        }
+        if (faulted) break;
+
+        /* 2s below threshold */
+        ctrl.pack.cell_voltage = BMS_SE_OVER_VOLTAGE_FAULT - 0.01;
+        for (int i = 0; i < 2; i++) {
+            corvus_controller_step(&ctrl, 1.0, bus_v);
+            if (ctrl.fault_latched) { faulted = true; break; }
+        }
+    }
+
+    ASSERT_TRUE(faulted, "Oscillating OV eventually trips fault via leaky timer");
+    ASSERT_EQ_INT(ctrl.mode, BMS_MODE_FAULT, "Mode = FAULT after oscillating OV");
+    ASSERT_TRUE(strstr(ctrl.fault_message, "OV") != NULL,
+                "Fault message contains OV");
+}
+
+/* =====================================================================
+ * TEST: corvus_array_find_pack_index helper
+ * ===================================================================== */
+static void test_find_pack_index(void)
+{
+    printf("test_find_pack_index\n");
+
+    int    ids[]   = { 10, 20, 30 };
+    double socs[]  = { 0.5, 0.5, 0.5 };
+    double temps[] = { 25.0, 25.0, 25.0 };
+
+    corvus_array_t array;
+    corvus_array_init(&array, 3, ids, socs, temps);
+
+    ASSERT_EQ_INT(corvus_array_find_pack_index(&array, 10), 0, "pack_id 10 at index 0");
+    ASSERT_EQ_INT(corvus_array_find_pack_index(&array, 20), 1, "pack_id 20 at index 1");
+    ASSERT_EQ_INT(corvus_array_find_pack_index(&array, 30), 2, "pack_id 30 at index 2");
+    ASSERT_EQ_INT(corvus_array_find_pack_index(&array, 99), -1, "pack_id 99 not found");
+}
+
+/* =====================================================================
  * MAIN
  * ===================================================================== */
 int main(void)
@@ -860,6 +944,9 @@ int main(void)
     test_entropic_heating_sign();
     test_large_dt_subdivision();
     test_max_temperature_clamp();
+    test_dt_error_code();
+    test_oscillating_ov_fault();
+    test_find_pack_index();
 
     printf("\n========================================\n");
     printf("  Results: %d/%d passed", g_tests_passed, g_tests_run);

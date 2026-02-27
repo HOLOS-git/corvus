@@ -22,17 +22,17 @@ Corvus is a demonstration project: a working simulation of Corvus Energy's Orca 
 ### Python Implementation
 | Path | Lines | Description |
 |------|-------|-------------|
-| `corvus_demo.py` | 1,356 | Complete v4 simulation — VirtualPack, PackController, ArrayController, 8-phase scenario |
+| `corvus_demo.py` | 1,393 | Complete v4 simulation — VirtualPack, PackController, ArrayController, 8-phase scenario |
 | `corvus_plot.png` | — | Generated 5-panel plot (SoC, voltage, temperature, current/limits, modes) |
 | `corvus_output.csv` | 1,347 | Time-series output from demo scenario (1,346 data rows + header) |
 
 ### C Port
 | Path | Lines | Description |
 |------|-------|-------------|
-| `c/corvus_bms.h` | 278 | Public API — structs, enums, function prototypes |
-| `c/corvus_bms.c` | 1,056 | Core BMS implementation — all physics and controls |
+| `c/corvus_bms.h` | 322 | Public API — structs, enums, function prototypes |
+| `c/corvus_bms.c` | 1,046 | Core BMS implementation — all physics and controls |
 | `c/corvus_demo.c` | 436 | 8-phase scenario runner with CSV output |
-| `c/test_corvus.c` | 713 | 20 test suites, 93 assertions |
+| `c/test_corvus.c` | 958 | 29 test suites, 123 assertions |
 | `c/Makefile` | 23 | Build targets: `make`, `make test`, `make debug` (ASan/UBSan) |
 
 ### Documentation
@@ -91,7 +91,7 @@ Corvus is a demonstration project: a working simulation of Corvus Energy's Orca 
 | v4 polish | KCL fix, warnings, temp floor, limitations | 6 critics (+legal, fresh eyes) |
 | v4 final | C port, electrochemistry fixes, site | 3 C-specific critics + Nick persona |
 
-**Total:** ~40 sub-agent reviews, ~3,840 lines of code (Python + C), 93 test assertions, 17 documented limitations.
+**Total:** ~40 sub-agent reviews, ~4,155 lines of code (Python + C), 123 test assertions, 17 documented limitations.
 
 ---
 

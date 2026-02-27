@@ -215,17 +215,29 @@ def ocv_from_soc(soc: float) -> float:
 def _docv_dt(soc: float) -> float:
     """Piecewise dOCV/dT for NMC 622 (V/K).
 
-    Simplified approximation:
-      SoC < 0.2:  -0.2 mV/K (exothermic on discharge)
-      SoC 0.2-0.8: -0.4 mV/K (exothermic on discharge)
-      SoC > 0.8:  +0.1 mV/K (endothermic on discharge)
+    7-segment approximation from literature:
+      SoC 0.00-0.10: -0.10 mV/K
+      SoC 0.10-0.25: -0.25 mV/K
+      SoC 0.25-0.50: -0.45 mV/K
+      SoC 0.50-0.70: -0.35 mV/K
+      SoC 0.70-0.85: -0.15 mV/K
+      SoC 0.85-0.95: +0.05 mV/K
+      SoC 0.95-1.00: +0.15 mV/K
     """
-    if soc < 0.2:
-        return -0.2e-3
-    elif soc <= 0.8:
-        return -0.4e-3
+    if soc < 0.10:
+        return -0.10e-3
+    elif soc < 0.25:
+        return -0.25e-3
+    elif soc < 0.50:
+        return -0.45e-3
+    elif soc < 0.70:
+        return -0.35e-3
+    elif soc < 0.85:
+        return -0.15e-3
+    elif soc < 0.95:
+        return  0.05e-3
     else:
-        return 0.1e-3
+        return  0.15e-3
 
 
 # =====================================================================
@@ -920,6 +932,9 @@ class ArrayController:
 
     def step(self, dt: float, requested_current: float,
              external_heat: Optional[Dict[int, float]] = None):
+        # NOTE: external_heat is keyed by pack_id (e.g. {3: 50000.0}).
+        # The C API uses a position-indexed array instead (external_heat[idx]).
+        # Use corvus_array_find_pack_index() in C to convert pack_id → index.
         """
         Main array step.
 

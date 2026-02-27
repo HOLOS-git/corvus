@@ -233,10 +233,13 @@ pre .const{color:#f0883e}
   <div class="bubble">
     <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
     <p>Thermal model: first-order lumped mass. <strong>Thermal mass = 1,268,000 J/°C</strong> (composite: 70% cell mass at 1050 J/kg/K + 30% non-cell at 500 J/kg/K). Cooling coefficient: <strong>800 W/°C</strong> forced air. Ambient: <strong>40°C</strong> — because engine rooms on ships aren't exactly air-conditioned, <span class="nick">Nick</span>.</p>
+    <p>Oh, and we also model <strong>entropic heating</strong> — the reversible heat term <strong>I·T·dOCV/dT</strong>. Most simple BMS sims pretend this doesn't exist. <span class="snark">We're not amateurs, <span class="nick">Nick</span>.</span> During charge the entropic term is endothermic for NMC in mid-SoC ranges — meaning the cell <em>absorbs</em> heat. Skip this and your thermal predictions are wrong in both directions. We didn't skip it.</p>
   </div>
 
-  <pre><span class="comment"># First-order thermal model</span>
-heat_gen = current² × R_total + external_heat
+  <pre><span class="comment"># First-order thermal model with entropic heating</span>
+Q_irrev  = current² × R_total                    <span class="comment"># irreversible (Joule) heating</span>
+Q_rev    = current × T_pack × dOCV/dT            <span class="comment"># reversible (entropic) heating</span>
+heat_gen = Q_irrev + Q_rev + external_heat
 cooling  = <span class="number">800</span> × (T_pack - <span class="number">40</span>)  <span class="comment"># W/°C × ΔT</span>
 dT/dt    = (heat_gen - cooling) / <span class="number">1,268,000</span>  <span class="comment"># J/°C</span></pre>
 </section>
@@ -334,6 +337,13 @@ discharge_limit = max(<span class="number">0</span>, min(td, sd, vd))</pre>
   <div class="bubble">
     <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
     <p>Three tiers of "things are bad." Table 13 lays it all out. Every threshold has a <em>delay timer</em> — no hair-trigger faults on a transient spike.</p>
+    <p>And those timers? They use <strong>leaky integrator decay</strong> now. Not hard resets. <span class="snark">Let us explain why that matters.</span></p>
+  </div>
+
+  <div class="alarm-card" style="background:rgba(188,140,255,.1);border:1px solid rgba(188,140,255,.3);border-radius:8px;padding:1.2rem 1.5rem;margin:1rem 0 1rem 2.5rem">
+    <h4 style="color:var(--purple);margin-bottom:.5rem">🧠 Leaky Fault Timers — Why This Matters</h4>
+    <p style="font-size:.85rem">Old approach: sensor reads high for 4.9 seconds, dips below threshold for one tick, timer resets to zero. Oscillating sensor defeats the fault detection indefinitely. <strong>That's bad on a boat, <span class="nick" style="color:var(--orange)">Nick</span>.</strong></p>
+    <p style="font-size:.85rem;margin-top:.5rem">New approach: timers use <strong>leaky integrator decay</strong> — the timer <em>decays gradually</em> when the condition clears instead of snapping to zero. A sensor oscillating around a fault threshold will still accumulate enough time to trip. <span style="color:var(--green);font-style:italic">Oscillation-proof fault detection.</span> The kind of thing that keeps marine class surveyors happy.</p>
   </div>
 
   <div class="alarm-grid">
@@ -382,6 +392,7 @@ discharge_limit = max(<span class="number">0</span>, min(td, sd, vd))</pre>
   <div class="bubble">
     <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
     <p><span class="nick">Nick</span>, when you parallel battery packs on a shared DC bus, current doesn't split evenly. It follows impedance. This is Kirchhoff's current law. <span class="snark">First year electrical engineering. We're sure you remember.</span></p>
+    <p>We cleaned house here, by the way. The Kirchhoff solver and the equalization solver used to be separate functions doing essentially the same linear algebra. Now it's a single <code>solve_currents()</code> — KCL with clamping handles both loaded and zero-load (equalization) cases. <span class="snark">Deduplication. Like refactoring, but competent.</span> We also added a <strong>large-dt subdivision guard</strong> — if your timestep is too big, we subdivide automatically instead of letting the physics explode. You're welcome.</p>
   </div>
 
   <div class="bubble">
@@ -427,6 +438,7 @@ discharge_limit = max(<span class="number">0</span>, min(td, sd, vd))</pre>
     <p>This code wasn't written and shipped. It went through <strong>~40 critic agents</strong> across <strong>5 review cycles</strong>. Each critic had a specific focus — sign conventions, thermal continuity, alarm timing, KCL conservation, safety independence, connect sequencing.</p>
     <p>Every fix has a tag. <code>Fix #2</code>: double-step bug. <code>Fix #5</code>: overcurrent discharge sign. <code>Fix #9</code>: connect ordering. <code>Fix #10</code>: Kirchhoff iteration cap. <code>Fix #11</code>: temperature limit continuity at 65-70°C.</p>
     <p><span class="snark">~40 reviewers. All paying attention. All at the same time. Your code reviews should be so thorough.</span></p>
+    <p style="margin-top:1rem"><strong style="color:var(--green);font-size:1.1rem">9/10</strong> from an independent marine BMS expert review. <span class="snark">We lost a point. We're still bitter about it. But 9 out of 10, <span class="nick">Nick</span>. From someone who actually builds these things.</span></p>
   </div>
 </section>
 
@@ -551,7 +563,7 @@ discharge_limit = max(<span class="number">0</span>, min(td, sd, vd))</pre>
 }</pre>
 
   <div class="c-stats">
-    <div class="c-stat"><span class="num">93</span><span class="label">Assertions, 20 Suites</span></div>
+    <div class="c-stat"><span class="num">123</span><span class="label">Assertions, 29 Suites</span></div>
     <div class="c-stat"><span class="num">0</span><span class="label">Warnings (-Werror)</span></div>
     <div class="c-stat"><span class="num">✓</span><span class="label">AddressSanitizer</span></div>
     <div class="c-stat"><span class="num">0</span><span class="label">malloc calls</span></div>
@@ -562,7 +574,7 @@ discharge_limit = max(<span class="number">0</span>, min(td, sd, vd))</pre>
       <svg class="crow-badge-c crow-icon" width="40" height="40"><use href="#crow"/></svg>
       <span class="badge-gear">⚙</span>
     </div>
-    <p>93 assertions across 20 test suites. Passes AddressSanitizer clean. Zero warnings with <code>-Wall -Wextra -Werror -pedantic</code>. Zero dynamic allocation. <span class="snark">Pure C99, like your firmware. Except ours compiles without warnings.</span></p>
+    <p>123 assertions across 29 test suites. Passes AddressSanitizer clean. Zero warnings with <code>-Wall -Wextra -Werror -pedantic</code>. Zero dynamic allocation. <span class="snark">Pure C99, like your firmware. Except ours compiles without warnings.</span></p>
     <p style="margin-top:1rem"><a href="https://github.com/HOLOS-git/corvus/tree/main/c" target="_blank" style="color:var(--amber)">View the C implementation on GitHub →</a></p>
   </div>
 </section>

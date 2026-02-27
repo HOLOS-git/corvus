@@ -214,9 +214,12 @@ double corvus_module_resistance(double temp, double soc);
 /** Pack resistance in Ω (22 modules in series). */
 double corvus_pack_resistance(double temp, double soc);
 
-/** Advance the pack model by dt seconds. */
-void corvus_pack_step(corvus_pack_t *pack, double dt, double current,
-                      bool contactors_closed, double external_heat);
+/**
+ * Advance the pack model by dt seconds.
+ * Returns 0 on success, -1 if dt <= 0.
+ */
+int corvus_pack_step(corvus_pack_t *pack, double dt, double current,
+                     bool contactors_closed, double external_heat);
 
 /* =====================================================================
  * CURRENT LIMIT API -- Figures 28, 29, 30
@@ -286,11 +289,25 @@ void corvus_array_compute_limits(corvus_array_t *array);
 
 /**
  * Main array step: step controllers, solve currents, step physics.
- * external_heat: array of per-pack external heat (W), or NULL.
+ *
+ * external_heat: array of per-pack external heat (W), indexed by array
+ * position (0..num_packs-1), NOT by pack_id. This differs from the Python
+ * API which uses a dict keyed by pack_id. Use corvus_array_find_pack_index()
+ * to convert pack_id to position index when building the external_heat array.
+ * Pass NULL for zero external heat on all packs.
  */
 void corvus_array_step(corvus_array_t *array, double dt,
                        double requested_current,
                        const double *external_heat);
+
+/**
+ * Helper: find the array index (0..num_packs-1) for a given pack_id.
+ * Returns -1 if not found.
+ *
+ * Use this to build position-indexed arrays (e.g. external_heat) from
+ * pack_id-keyed data, bridging the difference with Python's dict-based API.
+ */
+int corvus_array_find_pack_index(const corvus_array_t *array, int pack_id);
 
 /** Return name string for a pack mode enum value. */
 const char *bms_mode_name(bms_pack_mode_t mode);

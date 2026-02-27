@@ -151,14 +151,26 @@ double corvus_ocv_from_soc(double soc)
                    clamp_d(soc, 0.0, 1.0));
 }
 
+/**
+ * 7-segment piecewise dOCV/dT for NMC 622 (V/K).
+ * Approximate values from literature for finer entropic heating.
+ */
 double corvus_docv_dt(double soc)
 {
-    if (soc < 0.2)
-        return -0.2e-3;
-    else if (soc <= 0.8)
-        return -0.4e-3;
+    if (soc < 0.10)
+        return -0.10e-3;
+    else if (soc < 0.25)
+        return -0.25e-3;
+    else if (soc < 0.50)
+        return -0.45e-3;
+    else if (soc < 0.70)
+        return -0.35e-3;
+    else if (soc < 0.85)
+        return -0.15e-3;
+    else if (soc < 0.95)
+        return  0.05e-3;
     else
-        return 0.1e-3;
+        return  0.15e-3;
 }
 
 /* =====================================================================
@@ -310,10 +322,10 @@ static void pack_step_internal(corvus_pack_t *pack, double dt, double current,
     pack_update_voltage(pack);
 }
 
-void corvus_pack_step(corvus_pack_t *pack, double dt, double current,
-                      bool contactors_closed, double external_heat)
+int corvus_pack_step(corvus_pack_t *pack, double dt, double current,
+                     bool contactors_closed, double external_heat)
 {
-    if (dt <= 0.0) return;
+    if (dt <= 0.0) return -1;
     /* Large-dt guard: subdivide into sub-steps of at most BMS_MAX_DT */
     double remaining = dt;
     while (remaining > 0.0) {
@@ -321,6 +333,7 @@ void corvus_pack_step(corvus_pack_t *pack, double dt, double current,
         pack_step_internal(pack, sub_dt, current, contactors_closed, external_heat);
         remaining -= sub_dt;
     }
+    return 0;
 }
 
 /* =====================================================================
@@ -968,6 +981,15 @@ static void solve_currents(corvus_array_t *array,
         }
         array->bus_voltage = vsum / num_conn;
     }
+}
+
+int corvus_array_find_pack_index(const corvus_array_t *array, int pack_id)
+{
+    for (int i = 0; i < array->num_packs; i++) {
+        if (array->controllers[i].pack.pack_id == pack_id)
+            return i;
+    }
+    return -1;
 }
 
 void corvus_array_step(corvus_array_t *array, double dt,
