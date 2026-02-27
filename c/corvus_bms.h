@@ -68,6 +68,27 @@ extern "C" {
 /* Fault reset safe-state hold time -- Section 6.3.5 */
 #define BMS_FAULT_RESET_HOLD_TIME   60.0       /* seconds */
 
+/* Coulombic efficiency -- typical NMC 622 */
+#define BMS_COULOMBIC_EFFICIENCY     0.998
+
+/* Minimum temperature floor for thermal model */
+#define BMS_MIN_TEMPERATURE        -40.0       /* °C */
+
+/* Upper temperature clamp -- above this, thermal runaway makes model meaningless */
+#define BMS_MAX_TEMPERATURE        200.0       /* °C */
+
+/* Large-dt guard: subdivide steps larger than this */
+#define BMS_MAX_DT                  10.0       /* seconds */
+
+/* Fault timer leaky integrator decay rate (1/s) */
+#define BMS_FAULT_TIMER_DECAY_RATE   0.5
+
+/* Kirchhoff solver minimum conductance threshold (S) */
+#define BMS_MIN_CONDUCTANCE          1e-12
+
+/* Post-solve current limit tolerance (fraction) */
+#define BMS_CURRENT_LIMIT_TOLERANCE  0.01
+
 /* Array sizing */
 #define BMS_MAX_PACKS                8         /* max packs per array */
 
@@ -184,6 +205,9 @@ void corvus_pack_init(corvus_pack_t *pack, int pack_id,
 /** Open-circuit voltage per cell from SoC (24-point NMC 622 curve). */
 double corvus_ocv_from_soc(double soc);
 
+/** Piecewise dOCV/dT for NMC 622 (V/K). */
+double corvus_docv_dt(double soc);
+
 /** Module resistance in Ω from 2D R(T, SoC) bilinear interpolation. */
 double corvus_module_resistance(double temp, double soc);
 
@@ -270,6 +294,9 @@ void corvus_array_step(corvus_array_t *array, double dt,
 
 /** Return name string for a pack mode enum value. */
 const char *bms_mode_name(bms_pack_mode_t mode);
+
+/** Validate that all pack_ids in an array are unique. Returns true if valid. */
+bool corvus_validate_unique_pack_ids(const int *pack_ids, int num_packs);
 
 #ifdef __cplusplus
 }

@@ -151,6 +151,16 @@ double corvus_ocv_from_soc(double soc)
                    clamp_d(soc, 0.0, 1.0));
 }
 
+double corvus_docv_dt(double soc)
+{
+    if (soc < 0.2)
+        return -0.2e-3;
+    else if (soc <= 0.8)
+        return -0.4e-3;
+    else
+        return 0.1e-3;
+}
+
 /* =====================================================================
  * CURRENT LIMIT CURVES -- Figures 28, 29, 30 (RESEARCH.md breakpoints)
  * All return C-rates as positive magnitudes.
@@ -228,6 +238,11 @@ static void pack_update_voltage(corvus_pack_t *p)
     double ocv = corvus_ocv_from_soc(p->soc);
     double r_total = corvus_pack_resistance(p->temperature, p->soc);
     int n_cells = p->num_modules * p->cells_per_module;
+    if (n_cells <= 0) {
+        p->cell_voltage = ocv;
+        p->pack_voltage = 0.0;
+        return;
+    }
     p->cell_voltage = ocv + p->current * r_total / (double)n_cells;
     p->pack_voltage = p->cell_voltage * (double)n_cells;
 }
@@ -240,40 +255,72 @@ void corvus_pack_init(corvus_pack_t *pack, int pack_id,
     pack->num_modules     = BMS_NUM_MODULES;
     pack->cells_per_module = BMS_CELLS_PER_MODULE;
     pack->capacity_ah     = BMS_NOMINAL_CAPACITY_AH;
-    pack->soc             = soc;
+    pack->soc             = clamp_d(soc, 0.0, 1.0);
     pack->temperature     = temperature;
     pack->current         = 0.0;
     pack_update_voltage(pack);
 }
 
-void corvus_pack_step(corvus_pack_t *pack, double dt, double current,
-                      bool contactors_closed, double external_heat)
+bool corvus_validate_unique_pack_ids(const int *pack_ids, int num_packs)
+{
+    if (!pack_ids || num_packs <= 0)
+        return num_packs == 0;
+    for (int i = 0; i < num_packs; i++) {
+        for (int j = i + 1; j < num_packs; j++) {
+            if (pack_ids[i] == pack_ids[j])
+                return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Single sub-step of pack physics (no dt subdivision).
+ */
+static void pack_step_internal(corvus_pack_t *pack, double dt, double current,
+                               bool contactors_closed, double external_heat)
 {
     if (!contactors_closed)
         pack->current = 0.0;
     else
         pack->current = current;
 
-    /* Coulomb counting -- Section 2.3
-     * Coulombic efficiency: during charge, only 99.8% of current goes to
-     * lithium intercalation (rest is parasitic SEI growth). */
+    /* Coulomb counting -- Section 2.3 */
     double effective_current;
     if (pack->current > 0.0)  /* charging */
-        effective_current = pack->current * 0.998;
-    else  /* discharging — full coulombic extraction */
+        effective_current = pack->current * BMS_COULOMBIC_EFFICIENCY;
+    else  /* discharging */
         effective_current = pack->current;
     double delta_soc = (effective_current * dt) / (pack->capacity_ah * 3600.0);
     pack->soc = clamp_d(pack->soc + delta_soc, 0.0, 1.0);
 
-    /* First-order thermal: dT/dt = (I²R + external - cooling) / C_thermal */
+    /* First-order thermal: dT/dt = (I²R + Q_rev + external - cooling) / C_thermal */
     double r_total = corvus_pack_resistance(pack->temperature, pack->soc);
-    double heat_gen = pack->current * pack->current * r_total + external_heat;
+    int n_cells = pack->num_modules * pack->cells_per_module;
+    double t_kelvin = pack->temperature + 273.15;
+    double q_rev = pack->current * t_kelvin * corvus_docv_dt(pack->soc) * n_cells;
+    double heat_gen = pack->current * pack->current * r_total + q_rev + external_heat;
     double cooling = BMS_THERMAL_COOLING_COEFF * (pack->temperature - BMS_AMBIENT_TEMP);
     pack->temperature += (heat_gen - cooling) / BMS_THERMAL_MASS * dt;
-    if (pack->temperature < -40.0)
-        pack->temperature = -40.0;
+    if (pack->temperature < BMS_MIN_TEMPERATURE)
+        pack->temperature = BMS_MIN_TEMPERATURE;
+    if (pack->temperature > BMS_MAX_TEMPERATURE)
+        pack->temperature = BMS_MAX_TEMPERATURE;
 
     pack_update_voltage(pack);
+}
+
+void corvus_pack_step(corvus_pack_t *pack, double dt, double current,
+                      bool contactors_closed, double external_heat)
+{
+    if (dt <= 0.0) return;
+    /* Large-dt guard: subdivide into sub-steps of at most BMS_MAX_DT */
+    double remaining = dt;
+    while (remaining > 0.0) {
+        double sub_dt = remaining < BMS_MAX_DT ? remaining : BMS_MAX_DT;
+        pack_step_internal(pack, sub_dt, current, contactors_closed, external_heat);
+        remaining -= sub_dt;
+    }
 }
 
 /* =====================================================================
@@ -334,7 +381,7 @@ static void check_hw_safety(corvus_controller_t *ctrl, double dt)
             trigger_hw_fault(ctrl, msg);
         }
     } else {
-        ctrl->hw_ov_timer = 0.0;
+        ctrl->hw_ov_timer = max_d(0.0, ctrl->hw_ov_timer - dt * BMS_FAULT_TIMER_DECAY_RATE);
     }
 
     if (v <= BMS_HW_SAFETY_UNDER_VOLTAGE) {
@@ -345,7 +392,7 @@ static void check_hw_safety(corvus_controller_t *ctrl, double dt)
             trigger_hw_fault(ctrl, msg);
         }
     } else {
-        ctrl->hw_uv_timer = 0.0;
+        ctrl->hw_uv_timer = max_d(0.0, ctrl->hw_uv_timer - dt * BMS_FAULT_TIMER_DECAY_RATE);
     }
 
     if (t >= BMS_HW_SAFETY_OVER_TEMP) {
@@ -356,7 +403,7 @@ static void check_hw_safety(corvus_controller_t *ctrl, double dt)
             trigger_hw_fault(ctrl, msg);
         }
     } else {
-        ctrl->hw_ot_timer = 0.0;
+        ctrl->hw_ot_timer = max_d(0.0, ctrl->hw_ot_timer - dt * BMS_FAULT_TIMER_DECAY_RATE);
     }
 }
 
@@ -407,7 +454,7 @@ static void check_alarms(corvus_controller_t *ctrl, double dt)
         if (ctrl->oc_warn_timer >= 10.0)
             warn_oc = true;
     } else {
-        ctrl->oc_warn_timer = 0.0;
+        ctrl->oc_warn_timer = max_d(0.0, ctrl->oc_warn_timer - dt * BMS_FAULT_TIMER_DECAY_RATE);
     }
 
     bool any_warn = warn_ov || warn_uv || warn_ot || warn_oc;
@@ -451,10 +498,10 @@ static void check_alarms(corvus_controller_t *ctrl, double dt)
             trigger_sw_fault(ctrl, msg);
         }
     } else {
-        ctrl->oc_fault_timer = 0.0;
+        ctrl->oc_fault_timer = max_d(0.0, ctrl->oc_fault_timer - dt * BMS_FAULT_TIMER_DECAY_RATE);
     }
 
-    /* -- SE FAULTS (5s delay each) -- */
+    /* -- SE FAULTS (5s delay each) -- leaky integrator decay */
     if (v >= BMS_SE_OVER_VOLTAGE_FAULT) {
         ctrl->ov_fault_timer += dt;
         if (ctrl->ov_fault_timer >= 5.0 && !ctrl->fault_latched) {
@@ -463,7 +510,7 @@ static void check_alarms(corvus_controller_t *ctrl, double dt)
             trigger_sw_fault(ctrl, msg);
         }
     } else {
-        ctrl->ov_fault_timer = 0.0;
+        ctrl->ov_fault_timer = max_d(0.0, ctrl->ov_fault_timer - dt * BMS_FAULT_TIMER_DECAY_RATE);
     }
 
     if (v <= BMS_SE_UNDER_VOLTAGE_FAULT) {
@@ -474,7 +521,7 @@ static void check_alarms(corvus_controller_t *ctrl, double dt)
             trigger_sw_fault(ctrl, msg);
         }
     } else {
-        ctrl->uv_fault_timer = 0.0;
+        ctrl->uv_fault_timer = max_d(0.0, ctrl->uv_fault_timer - dt * BMS_FAULT_TIMER_DECAY_RATE);
     }
 
     if (t >= BMS_SE_OVER_TEMP_FAULT) {
@@ -485,7 +532,7 @@ static void check_alarms(corvus_controller_t *ctrl, double dt)
             trigger_sw_fault(ctrl, msg);
         }
     } else {
-        ctrl->ot_fault_timer = 0.0;
+        ctrl->ot_fault_timer = max_d(0.0, ctrl->ot_fault_timer - dt * BMS_FAULT_TIMER_DECAY_RATE);
     }
 }
 
@@ -652,7 +699,18 @@ void corvus_array_init(corvus_array_t *array, int num_packs,
                        const double *temperatures)
 {
     memset(array, 0, sizeof(*array));
+    if (!pack_ids || !socs || !temperatures || num_packs <= 0) {
+        array->num_packs = 0;
+        return;
+    }
     array->num_packs = num_packs < BMS_MAX_PACKS ? num_packs : BMS_MAX_PACKS;
+
+    /* Validate unique pack IDs */
+    if (!corvus_validate_unique_pack_ids(pack_ids, array->num_packs)) {
+        fprintf(stderr, "corvus_array_init: duplicate pack_ids detected\n");
+        /* Still initialize, but warn -- demo code, not abort */
+    }
+
     for (int i = 0; i < array->num_packs; i++)
         corvus_controller_init(&array->controllers[i], pack_ids[i],
                                socs[i], temperatures[i]);
@@ -764,28 +822,34 @@ void corvus_array_reset_all_faults(corvus_array_t *array)
 }
 
 /**
- * Kirchhoff current distribution with per-pack limit enforcement.
+ * Unified Kirchhoff/equalization solver with per-pack limit enforcement.
  *
- * V_bus = (Σ(OCV_k/R_k) + I_load) / Σ(1/R_k)
- * I_k = (V_bus - OCV_k) / R_k
+ * Kirchhoff mode (is_equalization=false):
+ *   V_bus = (Σ(OCV_k/R_k) + I_target) / Σ(1/R_k)
  *
- * Iteration cap = num connected, post-solve assertion.
+ * Equalization mode (is_equalization=true):
+ *   target_current = 0, KCL: ΣI_k = 0
+ *   V_bus = (Σ(OCV_k/R_k) - clamped_sum) / Σ(1/R_k)
  */
-static void solve_kirchhoff(corvus_array_t *array,
-                             int *conn_idx, int num_conn,
-                             double requested_current,
-                             double *pack_currents)
+static void solve_currents(corvus_array_t *array,
+                           int *conn_idx, int num_conn,
+                           double target_current,
+                           bool is_equalization,
+                           double *pack_currents)
 {
-    /* Clamp total requested current to array limits */
+    /* Clamp total requested current to array limits (Kirchhoff only) */
     double actual_total;
-    if (requested_current > 0)
-        actual_total = min_d(requested_current, array->array_charge_limit);
-    else if (requested_current < 0)
-        actual_total = max_d(requested_current, -array->array_discharge_limit);
-    else
+    if (!is_equalization) {
+        if (target_current > 0)
+            actual_total = min_d(target_current, array->array_charge_limit);
+        else if (target_current < 0)
+            actual_total = max_d(target_current, -array->array_discharge_limit);
+        else
+            actual_total = 0.0;
+    } else {
         actual_total = 0.0;
+    }
 
-    /* Track which packs are still active (not clamped) */
     bool active[BMS_MAX_PACKS];
     double clamped_val[BMS_MAX_PACKS];
     bool is_clamped[BMS_MAX_PACKS];
@@ -807,11 +871,19 @@ static void solve_kirchhoff(corvus_array_t *array,
             sum_g += 1.0 / r;
             sum_ocv_g += ocv / r;
         }
-        if (sum_g < 1e-12) break;
+        if (sum_g < BMS_MIN_CONDUCTANCE) break;
 
-        double v_bus = (sum_ocv_g + residual) / sum_g;
+        double v_bus;
+        if (is_equalization) {
+            double clamped_sum = 0.0;
+            for (int i = 0; i < num_conn; i++)
+                if (is_clamped[i]) clamped_sum += clamped_val[i];
+            v_bus = (sum_ocv_g - clamped_sum) / sum_g;
+        } else {
+            v_bus = (sum_ocv_g + residual) / sum_g;
+        }
+
         bool any_clamped = false;
-
         for (int i = 0; i < num_conn; i++) {
             if (!active[i]) continue;
             corvus_controller_t *c = &array->controllers[conn_idx[i]];
@@ -823,13 +895,13 @@ static void solve_kirchhoff(corvus_array_t *array,
                 clamped_val[i] = c->charge_current_limit;
                 is_clamped[i] = true;
                 active[i] = false;
-                residual -= c->charge_current_limit;
+                if (!is_equalization) residual -= c->charge_current_limit;
                 any_clamped = true;
             } else if (i_k < 0 && -i_k > c->discharge_current_limit) {
                 clamped_val[i] = -c->discharge_current_limit;
                 is_clamped[i] = true;
                 active[i] = false;
-                residual -= (-c->discharge_current_limit);
+                if (!is_equalization) residual -= (-c->discharge_current_limit);
                 any_clamped = true;
             } else {
                 pack_currents[i] = i_k;
@@ -838,126 +910,18 @@ static void solve_kirchhoff(corvus_array_t *array,
 
         if (!any_clamped) {
             array->bus_voltage = v_bus;
-            /* Merge clamped values */
-            for (int i = 0; i < num_conn; i++) {
-                if (is_clamped[i])
-                    pack_currents[i] = clamped_val[i];
-            }
-            /* Post-solve clamp */
-            for (int i = 0; i < num_conn; i++) {
-                corvus_controller_t *c = &array->controllers[conn_idx[i]];
-                if (pack_currents[i] > 0 && pack_currents[i] > c->charge_current_limit * 1.01)
-                    pack_currents[i] = c->charge_current_limit;
-                else if (pack_currents[i] < 0 && -pack_currents[i] > c->discharge_current_limit * 1.01)
-                    pack_currents[i] = -c->discharge_current_limit;
-            }
-            return;
-        }
-    }
+            for (int i = 0; i < num_conn; i++)
+                if (is_clamped[i]) pack_currents[i] = clamped_val[i];
 
-    /* Final solve with remaining active */
-    double sum_g = 0.0, sum_ocv_g = 0.0;
-    bool has_active = false;
-    for (int i = 0; i < num_conn; i++) {
-        if (!active[i]) { pack_currents[i] = clamped_val[i]; continue; }
-        has_active = true;
-        corvus_controller_t *c = &array->controllers[conn_idx[i]];
-        double r = corvus_pack_resistance(c->pack.temperature, c->pack.soc);
-        double ocv = corvus_ocv_from_soc(c->pack.soc) * (double)BMS_NUM_CELLS_SERIES;
-        sum_g += 1.0 / r;
-        sum_ocv_g += ocv / r;
-    }
-    if (has_active && sum_g > 1e-12) {
-        double v_bus = (sum_ocv_g + residual) / sum_g;
-        array->bus_voltage = v_bus;
-        for (int i = 0; i < num_conn; i++) {
-            if (!active[i]) continue;
-            corvus_controller_t *c = &array->controllers[conn_idx[i]];
-            double r = corvus_pack_resistance(c->pack.temperature, c->pack.soc);
-            double ocv = corvus_ocv_from_soc(c->pack.soc) * (double)BMS_NUM_CELLS_SERIES;
-            pack_currents[i] = (v_bus - ocv) / r;
-        }
-    } else if (!has_active) {
-        /* All clamped -- estimate bus voltage from terminal voltages */
-        double vsum = 0.0;
-        for (int i = 0; i < num_conn; i++) {
-            corvus_controller_t *c = &array->controllers[conn_idx[i]];
-            double r = corvus_pack_resistance(c->pack.temperature, c->pack.soc);
-            double ocv = corvus_ocv_from_soc(c->pack.soc) * (double)BMS_NUM_CELLS_SERIES;
-            vsum += ocv + pack_currents[i] * r;
-        }
-        array->bus_voltage = vsum / num_conn;
-    }
-}
-
-/**
- * At zero requested current, solve for equalization currents
- * between packs with different SoCs. KCL constraint: ΣI_k = 0.
- *
- * V_bus = Σ(OCV_k/R_k) / Σ(1/R_k)
- */
-static void solve_equalization(corvus_array_t *array,
-                               int *conn_idx, int num_conn,
-                               double *pack_currents)
-{
-    bool active[BMS_MAX_PACKS];
-    double clamped_val[BMS_MAX_PACKS];
-    bool is_clamped[BMS_MAX_PACKS];
-    for (int i = 0; i < num_conn; i++) {
-        active[i] = true;
-        clamped_val[i] = 0.0;
-        is_clamped[i] = false;
-    }
-
-    for (int iteration = 0; iteration < num_conn; iteration++) {
-        double sum_g = 0.0, sum_ocv_g = 0.0;
-        for (int i = 0; i < num_conn; i++) {
-            if (!active[i]) continue;
-            corvus_controller_t *c = &array->controllers[conn_idx[i]];
-            double r = corvus_pack_resistance(c->pack.temperature, c->pack.soc);
-            double ocv = corvus_ocv_from_soc(c->pack.soc) * (double)BMS_NUM_CELLS_SERIES;
-            sum_g += 1.0 / r;
-            sum_ocv_g += ocv / r;
-        }
-        if (sum_g < 1e-12) break;
-
-        /* ΣI_k = 0 → V_bus = (Σ(OCV_k/R_k) - clamped_sum) / Σ(1/R_k) */
-        double clamped_sum = 0.0;
-        for (int i = 0; i < num_conn; i++) {
-            if (is_clamped[i])
-                clamped_sum += clamped_val[i];
-        }
-
-        double v_bus = (sum_ocv_g - clamped_sum) / sum_g;
-        bool any_clamped = false;
-
-        for (int i = 0; i < num_conn; i++) {
-            if (!active[i]) continue;
-            corvus_controller_t *c = &array->controllers[conn_idx[i]];
-            double r = corvus_pack_resistance(c->pack.temperature, c->pack.soc);
-            double ocv = corvus_ocv_from_soc(c->pack.soc) * (double)BMS_NUM_CELLS_SERIES;
-            double i_k = (v_bus - ocv) / r;
-
-            if (i_k > 0 && i_k > c->charge_current_limit) {
-                clamped_val[i] = c->charge_current_limit;
-                is_clamped[i] = true;
-                active[i] = false;
-                any_clamped = true;
-            } else if (i_k < 0 && -i_k > c->discharge_current_limit) {
-                clamped_val[i] = -c->discharge_current_limit;
-                is_clamped[i] = true;
-                active[i] = false;
-                any_clamped = true;
-            } else {
-                pack_currents[i] = i_k;
-            }
-        }
-
-        if (!any_clamped) {
-            array->bus_voltage = v_bus;
-            for (int i = 0; i < num_conn; i++) {
-                if (is_clamped[i])
-                    pack_currents[i] = clamped_val[i];
+            if (!is_equalization) {
+                /* Post-solve clamp */
+                for (int i = 0; i < num_conn; i++) {
+                    corvus_controller_t *c = &array->controllers[conn_idx[i]];
+                    if (pack_currents[i] > 0 && pack_currents[i] > c->charge_current_limit * (1.0 + BMS_CURRENT_LIMIT_TOLERANCE))
+                        pack_currents[i] = c->charge_current_limit;
+                    else if (pack_currents[i] < 0 && -pack_currents[i] > c->discharge_current_limit * (1.0 + BMS_CURRENT_LIMIT_TOLERANCE))
+                        pack_currents[i] = -c->discharge_current_limit;
+                }
             }
             return;
         }
@@ -980,8 +944,12 @@ static void solve_equalization(corvus_array_t *array,
         sum_g += 1.0 / r;
         sum_ocv_g += ocv / r;
     }
-    if (has_active && sum_g > 1e-12) {
-        double v_bus = (sum_ocv_g - clamped_sum) / sum_g;
+    if (has_active && sum_g > BMS_MIN_CONDUCTANCE) {
+        double v_bus;
+        if (is_equalization)
+            v_bus = (sum_ocv_g - clamped_sum) / sum_g;
+        else
+            v_bus = (sum_ocv_g + residual) / sum_g;
         array->bus_voltage = v_bus;
         for (int i = 0; i < num_conn; i++) {
             if (is_clamped[i]) continue;
@@ -1027,9 +995,9 @@ void corvus_array_step(corvus_array_t *array, double dt,
         corvus_array_compute_limits(array);
 
         if (requested_current != 0.0)
-            solve_kirchhoff(array, conn_idx, num_conn, requested_current, pack_currents);
+            solve_currents(array, conn_idx, num_conn, requested_current, false, pack_currents);
         else
-            solve_equalization(array, conn_idx, num_conn, pack_currents);
+            solve_currents(array, conn_idx, num_conn, 0.0, true, pack_currents);
 
         /* 3. Step physics for connected packs */
         for (int j = 0; j < num_conn; j++) {

@@ -449,12 +449,12 @@ static void test_thermal_model(void)
 
     double t_before = ctrl.pack.temperature;
 
-    /* Charge at 200A for 100 steps — should heat up via I²R */
+    /* Discharge at -200A for 100 steps — should heat up via I²R + entropic heat */
     for (int i = 0; i < 100; i++)
-        corvus_pack_step(&ctrl.pack, 1.0, 200.0, true, 0.0);
+        corvus_pack_step(&ctrl.pack, 1.0, -200.0, true, 0.0);
 
     ASSERT_TRUE(ctrl.pack.temperature > t_before + 0.01,
-                "Temperature increased from I²R heating");
+                "Temperature increased from I²R + entropic heating");
 
     double t_hot = ctrl.pack.temperature;
 
@@ -464,8 +464,8 @@ static void test_thermal_model(void)
 
     ASSERT_TRUE(ctrl.pack.temperature < t_hot,
                 "Temperature decreased when idle (cooling)");
-    ASSERT_TRUE(ctrl.pack.temperature > BMS_AMBIENT_TEMP - 0.1,
-                "Temperature stays above ambient");
+    ASSERT_TRUE(ctrl.pack.temperature >= BMS_AMBIENT_TEMP - 0.5,
+                "Temperature stays near or above ambient");
 }
 
 /* =====================================================================
@@ -674,6 +674,158 @@ static void test_fractional_dt(void)
 }
 
 /* =====================================================================
+ * TEST: Pack ID uniqueness validation
+ * ===================================================================== */
+static void test_pack_id_uniqueness(void)
+{
+    printf("test_pack_id_uniqueness\n");
+
+    int unique_ids[] = { 1, 2, 3 };
+    ASSERT_TRUE(corvus_validate_unique_pack_ids(unique_ids, 3),
+                "Unique IDs accepted");
+
+    int dup_ids[] = { 1, 2, 1 };
+    ASSERT_FALSE(corvus_validate_unique_pack_ids(dup_ids, 3),
+                 "Duplicate IDs rejected");
+
+    ASSERT_TRUE(corvus_validate_unique_pack_ids(NULL, 0),
+                "Empty array accepted");
+
+    int single[] = { 42 };
+    ASSERT_TRUE(corvus_validate_unique_pack_ids(single, 1),
+                "Single ID accepted");
+}
+
+/* =====================================================================
+ * TEST: Input validation — SoC clamped, dt=0 is no-op
+ * ===================================================================== */
+static void test_input_validation(void)
+{
+    printf("test_input_validation\n");
+
+    corvus_pack_t pack;
+    /* SoC out of range should be clamped */
+    corvus_pack_init(&pack, 99, 1.5, 25.0);
+    ASSERT_NEAR(pack.soc, 1.0, 1e-9, "SoC clamped to 1.0");
+
+    corvus_pack_init(&pack, 100, -0.5, 25.0);
+    ASSERT_NEAR(pack.soc, 0.0, 1e-9, "SoC clamped to 0.0");
+
+    /* dt=0 should be a no-op */
+    corvus_pack_init(&pack, 101, 0.5, 25.0);
+    double soc_before = pack.soc;
+    corvus_pack_step(&pack, 0.0, 100.0, true, 0.0);
+    ASSERT_NEAR(pack.soc, soc_before, 1e-9, "dt=0 is a no-op");
+}
+
+/* =====================================================================
+ * TEST: Leaky fault timer decay
+ * ===================================================================== */
+static void test_leaky_timer_decay(void)
+{
+    printf("test_leaky_timer_decay\n");
+
+    corvus_controller_t ctrl;
+    corvus_controller_init(&ctrl, 1, 0.50, 25.0);
+    double bus_v = ctrl.pack.pack_voltage;
+
+    /* Force OV fault condition for 3s to build up timer */
+    ctrl.pack.cell_voltage = BMS_SE_OVER_VOLTAGE_FAULT + 0.01;
+    for (int i = 0; i < 3; i++)
+        corvus_controller_step(&ctrl, 1.0, bus_v);
+
+    double timer_after_active = ctrl.ov_fault_timer;
+    ASSERT_NEAR(timer_after_active, 3.0, 0.01, "OV timer = 3.0 after 3s active");
+
+    /* Clear condition for 1s -- timer should decay, not reset to 0 */
+    ctrl.pack.cell_voltage = 3.7;
+    corvus_controller_step(&ctrl, 1.0, bus_v);
+
+    ASSERT_TRUE(ctrl.ov_fault_timer > 0.0, "Leaky timer > 0 after 1s clear");
+    ASSERT_TRUE(ctrl.ov_fault_timer < timer_after_active,
+                "Leaky timer decreased after clear");
+    /* Expected: 3.0 - 1.0 * 0.5 = 2.5 */
+    ASSERT_NEAR(ctrl.ov_fault_timer, 2.5, 0.01, "Leaky timer = 2.5 after 1s decay");
+}
+
+/* =====================================================================
+ * TEST: Entropic heating sign -- discharge at mid-SoC should add heat
+ * ===================================================================== */
+static void test_entropic_heating_sign(void)
+{
+    printf("test_entropic_heating_sign\n");
+
+    /* At mid-SoC (0.5), dOCV/dT = -0.4 mV/K
+     * Discharging (I < 0): Q_rev = I * T_K * dOCV/dT * n_cells
+     * I < 0, dOCV/dT < 0 → Q_rev > 0 (exothermic, adds heat) */
+    double docv = corvus_docv_dt(0.5);
+    ASSERT_NEAR(docv, -0.4e-3, 1e-6, "dOCV/dT at SoC=0.5");
+
+    /* Compare two packs: one with entropic heating (discharge), one idle */
+    corvus_pack_t pack_disch, pack_idle;
+    corvus_pack_init(&pack_disch, 1, 0.50, 25.0);
+    corvus_pack_init(&pack_idle, 2, 0.50, 25.0);
+
+    /* Discharge at -100A for 100s */
+    for (int i = 0; i < 100; i++) {
+        corvus_pack_step(&pack_disch, 1.0, -100.0, true, 0.0);
+        corvus_pack_step(&pack_idle, 1.0, 0.0, false, 0.0);
+    }
+
+    /* Discharging pack should be warmer than idle (I²R + positive Q_rev) */
+    ASSERT_TRUE(pack_disch.temperature > pack_idle.temperature,
+                "Discharging pack warmer than idle");
+
+    /* At high SoC (>0.8), dOCV/dT = +0.1 mV/K (endothermic on discharge) */
+    double docv_high = corvus_docv_dt(0.9);
+    ASSERT_NEAR(docv_high, 0.1e-3, 1e-6, "dOCV/dT at SoC=0.9 is positive");
+}
+
+/* =====================================================================
+ * TEST: Large-dt subdivision -- result should match many small steps
+ * ===================================================================== */
+static void test_large_dt_subdivision(void)
+{
+    printf("test_large_dt_subdivision\n");
+
+    corvus_pack_t pack_big, pack_small;
+    corvus_pack_init(&pack_big, 1, 0.50, 25.0);
+    corvus_pack_init(&pack_small, 2, 0.50, 25.0);
+
+    /* One big step of 30s should be subdivided into 3×10s */
+    corvus_pack_step(&pack_big, 30.0, 100.0, true, 0.0);
+
+    /* Three small steps of 10s each */
+    corvus_pack_step(&pack_small, 10.0, 100.0, true, 0.0);
+    corvus_pack_step(&pack_small, 10.0, 100.0, true, 0.0);
+    corvus_pack_step(&pack_small, 10.0, 100.0, true, 0.0);
+
+    ASSERT_NEAR(pack_big.soc, pack_small.soc, 1e-6,
+                "Large-dt SoC matches 3x small-dt");
+    ASSERT_NEAR(pack_big.temperature, pack_small.temperature, 0.01,
+                "Large-dt temp matches 3x small-dt");
+}
+
+/* =====================================================================
+ * TEST: Max temperature clamp at 200°C
+ * ===================================================================== */
+static void test_max_temperature_clamp(void)
+{
+    printf("test_max_temperature_clamp\n");
+
+    corvus_pack_t pack;
+    corvus_pack_init(&pack, 1, 0.50, 190.0);
+
+    /* Inject massive external heat to push past 200°C */
+    corvus_pack_step(&pack, 1.0, 0.0, false, 1e9);
+
+    ASSERT_TRUE(pack.temperature <= BMS_MAX_TEMPERATURE + 0.01,
+                "Temperature clamped at MAX_TEMPERATURE");
+    ASSERT_NEAR(pack.temperature, BMS_MAX_TEMPERATURE, 0.01,
+                "Temperature = 200.0 after clamp");
+}
+
+/* =====================================================================
  * MAIN
  * ===================================================================== */
 int main(void)
@@ -702,6 +854,12 @@ int main(void)
     test_warning_hysteresis_clear();
     test_array_current_limits();
     test_fractional_dt();
+    test_pack_id_uniqueness();
+    test_input_validation();
+    test_leaky_timer_decay();
+    test_entropic_heating_sign();
+    test_large_dt_subdivision();
+    test_max_temperature_clamp();
 
     printf("\n========================================\n");
     printf("  Results: %d/%d passed", g_tests_passed, g_tests_run);

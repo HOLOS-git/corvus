@@ -105,6 +105,31 @@ FAULT_RESET_HOLD_TIME = 60.0       # seconds
 # During charge, ~0.2% of current goes to parasitic reactions (SEI growth)
 COULOMBIC_EFFICIENCY = 0.998
 
+# Minimum temperature floor for thermal model (°C)
+MIN_TEMPERATURE = -40.0
+
+# Fault timer leaky integrator decay rate (1/s)
+# When fault condition clears, timer decays by dt * DECAY_RATE instead of resetting
+FAULT_TIMER_DECAY_RATE = 0.5
+
+# Large-dt guard: subdivide steps larger than this
+MAX_DT = 10.0
+
+# Upper temperature clamp (°C) -- above this, thermal runaway makes model meaningless
+MAX_TEMPERATURE = 200.0
+
+# Reduced cooling coefficient for fan failure scenario (W/°C)
+REDUCED_COOLING_COEFF = 50.0
+
+# Adjacent machinery heat in engine room (W)
+ADJACENT_HEAT = 50_000.0
+
+# Kirchhoff solver minimum conductance threshold (S)
+MIN_CONDUCTANCE = 1e-12
+
+# Post-solve current limit tolerance (fraction)
+CURRENT_LIMIT_TOLERANCE = 0.01
+
 
 # =====================================================================
 # RESISTANCE LOOKUP TABLE -- R_module(T, SoC) in mΩ
@@ -187,6 +212,22 @@ def ocv_from_soc(soc: float) -> float:
     return float(np.interp(np.clip(soc, 0.0, 1.0), _SOC_BP, _OCV_BP))
 
 
+def _docv_dt(soc: float) -> float:
+    """Piecewise dOCV/dT for NMC 622 (V/K).
+
+    Simplified approximation:
+      SoC < 0.2:  -0.2 mV/K (exothermic on discharge)
+      SoC 0.2-0.8: -0.4 mV/K (exothermic on discharge)
+      SoC > 0.8:  +0.1 mV/K (endothermic on discharge)
+    """
+    if soc < 0.2:
+        return -0.2e-3
+    elif soc <= 0.8:
+        return -0.4e-3
+    else:
+        return 0.1e-3
+
+
 # =====================================================================
 # CURRENT LIMIT CURVES -- Figures 28, 29, 30 (RESEARCH.md breakpoints)
 # All return C-rates as positive magnitudes. Caller multiplies by capacity.
@@ -255,6 +296,10 @@ class PackMode(Enum):
 # VIRTUAL PACK -- the battery model
 # =====================================================================
 
+# Registry of active pack IDs to enforce uniqueness
+_pack_id_registry: set = set()
+
+
 @dataclass
 class VirtualPack:
     """
@@ -273,6 +318,21 @@ class VirtualPack:
     pack_voltage: float = 0.0
 
     def __post_init__(self):
+        # Enforce unique pack_id
+        if self.pack_id in _pack_id_registry:
+            raise ValueError(
+                f"Duplicate pack_id {self.pack_id}. "
+                f"Active IDs: {sorted(_pack_id_registry)}")
+        _pack_id_registry.add(self.pack_id)
+
+        # Input validation
+        if self.num_modules <= 0:
+            raise ValueError(f"num_modules must be > 0, got {self.num_modules}")
+        if self.cells_per_module <= 0:
+            raise ValueError(f"cells_per_module must be > 0, got {self.cells_per_module}")
+        if self.capacity_ah <= 0:
+            raise ValueError(f"capacity_ah must be > 0, got {self.capacity_ah}")
+        self.soc = float(np.clip(self.soc, 0.0, 1.0))
         self._update_voltage()
 
     @property
@@ -294,17 +354,15 @@ class VirtualPack:
         self.cell_voltage = ocv + self.current * self.r_total / self.num_cells_series
         self.pack_voltage = self.cell_voltage * self.num_cells_series
 
-    def step(self, dt: float, current: float, contactors_closed: bool,
-             external_heat: float = 0.0):
-        """Advance the pack model by dt seconds."""
+    def _step_internal(self, dt: float, current: float, contactors_closed: bool,
+                       external_heat: float = 0.0):
+        """Single sub-step of pack physics (no dt subdivision)."""
         if not contactors_closed:
             self.current = 0.0
         else:
             self.current = current
 
         # Coulomb counting -- Section 2.3
-        # Coulombic efficiency: during charge, only 99.8% of current
-        # goes to lithium intercalation (rest is parasitic SEI growth)
         if self.current > 0:  # charging
             effective_current = self.current * COULOMBIC_EFFICIENCY
         else:  # discharging — full coulombic extraction
@@ -312,13 +370,28 @@ class VirtualPack:
         delta_soc = (effective_current * dt) / (self.capacity_ah * 3600.0)
         self.soc = np.clip(self.soc + delta_soc, 0.0, 1.0)
 
-        # First-order thermal: dT/dt = (I²R + external - cooling) / C_thermal
-        heat_gen = self.current ** 2 * self.r_total + external_heat
+        # First-order thermal: dT/dt = (I²R + Q_rev + external - cooling) / C_thermal
+        n_cells = self.num_cells_series
+        t_kelvin = self.temperature + 273.15
+        q_rev = self.current * t_kelvin * _docv_dt(self.soc) * n_cells
+        heat_gen = self.current ** 2 * self.r_total + q_rev + external_heat
         cooling = THERMAL_COOLING_COEFF * (self.temperature - AMBIENT_TEMP)
         self.temperature += (heat_gen - cooling) / THERMAL_MASS * dt
-        self.temperature = max(-40.0, self.temperature)
+        self.temperature = max(MIN_TEMPERATURE, min(MAX_TEMPERATURE, self.temperature))
 
         self._update_voltage()
+
+    def step(self, dt: float, current: float, contactors_closed: bool,
+             external_heat: float = 0.0):
+        """Advance the pack model by dt seconds (with large-dt subdivision)."""
+        if dt <= 0.0:
+            raise ValueError(f"dt must be > 0, got {dt}")
+        # Large-dt guard: subdivide into sub-steps of at most MAX_DT
+        remaining = dt
+        while remaining > 0.0:
+            sub_dt = min(remaining, MAX_DT)
+            self._step_internal(sub_dt, current, contactors_closed, external_heat)
+            remaining -= sub_dt
 
 
 # =====================================================================
@@ -471,7 +544,7 @@ class PackController:
                     self._trigger_hw_fault(
                         f"HW SAFETY: voltage {v:.3f}V >= {HW_SAFETY_OVER_VOLTAGE}V")
             else:
-                self._hw_ov_timer = 0.0
+                self._hw_ov_timer = max(0.0, self._hw_ov_timer - dt * FAULT_TIMER_DECAY_RATE)
 
             if v <= HW_SAFETY_UNDER_VOLTAGE:
                 self._hw_uv_timer += dt
@@ -479,7 +552,7 @@ class PackController:
                     self._trigger_hw_fault(
                         f"HW SAFETY: voltage {v:.3f}V <= {HW_SAFETY_UNDER_VOLTAGE}V")
             else:
-                self._hw_uv_timer = 0.0
+                self._hw_uv_timer = max(0.0, self._hw_uv_timer - dt * FAULT_TIMER_DECAY_RATE)
 
             if t >= HW_SAFETY_OVER_TEMP:
                 self._hw_ot_timer += dt
@@ -487,7 +560,7 @@ class PackController:
                     self._trigger_hw_fault(
                         f"HW SAFETY: temp {t:.1f}°C >= {HW_SAFETY_OVER_TEMP}°C")
             else:
-                self._hw_ot_timer = 0.0
+                self._hw_ot_timer = max(0.0, self._hw_ot_timer - dt * FAULT_TIMER_DECAY_RATE)
         except Exception as e:
             # HW safety must never silently fail
             self._trigger_hw_fault(f"HW SAFETY: exception during check: {e}")
@@ -547,7 +620,7 @@ class PackController:
             if self._oc_warn_timer >= 10.0:
                 warnings.append(f"OC warning: I={i:.1f}A")
         else:
-            self._oc_warn_timer = 0.0
+            self._oc_warn_timer = max(0.0, self._oc_warn_timer - dt * FAULT_TIMER_DECAY_RATE)
 
         warn_active = len(warnings) > 0
 
@@ -569,29 +642,29 @@ class PackController:
             if self._oc_fault_timer >= 5.0 and not self.fault_latched:
                 self._trigger_sw_fault(f"OC fault: I={i:.1f}A at T={t:.1f}°C (charge at sub-zero)")
         else:
-            self._oc_fault_timer = 0.0
+            self._oc_fault_timer = max(0.0, self._oc_fault_timer - dt * FAULT_TIMER_DECAY_RATE)
 
-        # -- SE FAULTS (5s delay each) --
+        # -- SE FAULTS (5s delay each) -- leaky integrator decay
         if v >= SE_OVER_VOLTAGE_FAULT:
             self._ov_fault_timer += dt
             if self._ov_fault_timer >= 5.0 and not self.fault_latched:
                 self._trigger_sw_fault(f"SE OV fault: {v:.3f}V >= {SE_OVER_VOLTAGE_FAULT}V")
         else:
-            self._ov_fault_timer = 0.0
+            self._ov_fault_timer = max(0.0, self._ov_fault_timer - dt * FAULT_TIMER_DECAY_RATE)
 
         if v <= SE_UNDER_VOLTAGE_FAULT:
             self._uv_fault_timer += dt
             if self._uv_fault_timer >= 5.0 and not self.fault_latched:
                 self._trigger_sw_fault(f"SE UV fault: {v:.3f}V <= {SE_UNDER_VOLTAGE_FAULT}V")
         else:
-            self._uv_fault_timer = 0.0
+            self._uv_fault_timer = max(0.0, self._uv_fault_timer - dt * FAULT_TIMER_DECAY_RATE)
 
         if t >= SE_OVER_TEMP_FAULT:
             self._ot_fault_timer += dt
             if self._ot_fault_timer >= 5.0 and not self.fault_latched:
                 self._trigger_sw_fault(f"SE OT fault: {t:.1f}°C >= {SE_OVER_TEMP_FAULT}°C")
         else:
-            self._ot_fault_timer = 0.0
+            self._ot_fault_timer = max(0.0, self._ot_fault_timer - dt * FAULT_TIMER_DECAY_RATE)
 
     def _trigger_sw_fault(self, message: str):
         """Software fault -- opens contactors, latches."""
@@ -738,25 +811,32 @@ class ArrayController:
         self.array_charge_limit = min(c.charge_current_limit for c in conn) * n
         self.array_discharge_limit = min(c.discharge_current_limit for c in conn) * n
 
-    def _solve_kirchhoff(self, conn: List[PackController],
-                         requested_current: float) -> Dict[int, float]:
+    def _solve_currents(self, conn: List[PackController],
+                        target_current: float,
+                        is_equalization: bool = False) -> Dict[int, float]:
         """
-        Kirchhoff current distribution with per-pack limit enforcement.
+        Unified Kirchhoff/equalization solver with per-pack limit enforcement.
 
-        V_bus = (Σ(OCV_k/R_k) + I_load) / Σ(1/R_k)
-        I_k = (V_bus - OCV_k) / R_k
+        Kirchhoff mode (is_equalization=False):
+          V_bus = (Σ(OCV_k/R_k) + I_target) / Σ(1/R_k)
+          Clamped packs reduce the residual current for remaining packs.
 
-        Fix #10: iteration cap = len(conn), post-solve assertion,
-        equalization at zero load, bus voltage stored from solver.
+        Equalization mode (is_equalization=True):
+          target_current = 0.0, KCL: ΣI_k = 0
+          Clamped packs' currents are absorbed by unclamped packs via
+          V_bus = (Σ(OCV_k/R_k) - clamped_sum) / Σ(1/R_k)
         """
         if not conn:
             return {}
 
-        # Clamp total requested current to array limits
-        if requested_current > 0:
-            actual_total = min(requested_current, self.array_charge_limit)
-        elif requested_current < 0:
-            actual_total = max(requested_current, -self.array_discharge_limit)
+        # Clamp total requested current to array limits (Kirchhoff only)
+        if not is_equalization:
+            if target_current > 0:
+                actual_total = min(target_current, self.array_charge_limit)
+            elif target_current < 0:
+                actual_total = max(target_current, -self.array_discharge_limit)
+            else:
+                actual_total = 0.0
         else:
             actual_total = 0.0
 
@@ -764,7 +844,6 @@ class ArrayController:
         clamped: Dict[int, float] = {}
         residual = actual_total
 
-        # Fix #10: iteration cap = len(conn)
         for _iteration in range(len(conn)):
             if not active:
                 break
@@ -772,97 +851,14 @@ class ArrayController:
             sum_g = sum(1.0 / c.pack.r_total for c in active)
             sum_ocv_g = sum(c.pack.ocv_pack / c.pack.r_total for c in active)
 
-            if sum_g < 1e-12:
+            if sum_g < MIN_CONDUCTANCE:
                 break
 
-            v_bus = (sum_ocv_g + residual) / sum_g
-
-            pack_currents: Dict[int, float] = {}
-            any_clamped = False
-            for c in list(active):
-                i_k = (v_bus - c.pack.ocv_pack) / c.pack.r_total
-                if i_k > 0 and i_k > c.charge_current_limit:
-                    clamped[c.pack.pack_id] = c.charge_current_limit
-                    residual -= c.charge_current_limit
-                    active.remove(c)
-                    any_clamped = True
-                elif i_k < 0 and abs(i_k) > c.discharge_current_limit:
-                    clamped[c.pack.pack_id] = -c.discharge_current_limit
-                    residual -= (-c.discharge_current_limit)
-                    active.remove(c)
-                    any_clamped = True
-                else:
-                    pack_currents[c.pack.pack_id] = i_k
-
-            if not any_clamped:
-                self.bus_voltage = v_bus
-                pack_currents.update(clamped)
-
-                # Fix #10: post-solve assertion -- verify no pack exceeds limit
-                # Clamp and accept small KCL violation at 1% tolerance
-                for c in conn:
-                    pid = c.pack.pack_id
-                    ik = pack_currents.get(pid, 0.0)
-                    if ik > 0 and ik > c.charge_current_limit * 1.01:
-                        pack_currents[pid] = c.charge_current_limit
-                    elif ik < 0 and abs(ik) > c.discharge_current_limit * 1.01:
-                        pack_currents[pid] = -c.discharge_current_limit
-                # Update bus voltage to reflect actual delivered current
-                actual_total = sum(pack_currents.values())
-                if abs(actual_total - requested_current) > 0.01 * abs(requested_current + 1e-9):
-                    pass  # Small KCL residual accepted at 1% tolerance for demo
-
-                return pack_currents
-
-        # Final solve with remaining active
-        if active:
-            sum_g = sum(1.0 / c.pack.r_total for c in active)
-            sum_ocv_g = sum(c.pack.ocv_pack / c.pack.r_total for c in active)
-            if sum_g > 1e-12:
+            if is_equalization:
+                clamped_sum = sum(clamped.values())
+                v_bus = (sum_ocv_g - clamped_sum) / sum_g
+            else:
                 v_bus = (sum_ocv_g + residual) / sum_g
-                self.bus_voltage = v_bus
-                for c in active:
-                    clamped[c.pack.pack_id] = (v_bus - c.pack.ocv_pack) / c.pack.r_total
-        elif clamped:
-            voltages = []
-            for c in conn:
-                i_k = clamped.get(c.pack.pack_id, 0.0)
-                voltages.append(c.pack.ocv_pack + i_k * c.pack.r_total)
-            self.bus_voltage = float(np.mean(voltages))
-
-        return clamped
-
-    def _solve_equalization(self, conn: List[PackController]) -> Dict[int, float]:
-        """
-        Fix #10: At zero requested current, solve for equalization currents
-        between packs with different SoCs.  KCL constraint: ΣI_k = 0.
-
-        V_bus = weighted average OCV: Σ(OCV_k/R_k) / Σ(1/R_k)
-        I_k = (V_bus - OCV_k) / R_k
-
-        After clamping any pack, re-solve V_bus for unclamped packs so that
-        their currents absorb the difference (same iterative clamp-and-remove
-        approach as _solve_kirchhoff).
-        """
-        if not conn:
-            return {}
-
-        active = list(conn)
-        clamped: Dict[int, float] = {}
-
-        for _iteration in range(len(conn)):
-            if not active:
-                break
-
-            sum_g = sum(1.0 / c.pack.r_total for c in active)
-            sum_ocv_g = sum(c.pack.ocv_pack / c.pack.r_total for c in active)
-
-            if sum_g < 1e-12:
-                break
-
-            # Residual that unclamped packs must absorb = 0 - sum(clamped currents)
-            clamped_sum = sum(clamped.values())
-            v_bus = (sum_ocv_g - clamped_sum) / sum_g
 
             pack_currents: Dict[int, float] = {}
             any_clamped = False
@@ -870,10 +866,14 @@ class ArrayController:
                 i_k = (v_bus - c.pack.ocv_pack) / c.pack.r_total
                 if i_k > 0 and i_k > c.charge_current_limit:
                     clamped[c.pack.pack_id] = c.charge_current_limit
+                    if not is_equalization:
+                        residual -= c.charge_current_limit
                     active.remove(c)
                     any_clamped = True
                 elif i_k < 0 and abs(i_k) > c.discharge_current_limit:
                     clamped[c.pack.pack_id] = -c.discharge_current_limit
+                    if not is_equalization:
+                        residual -= (-c.discharge_current_limit)
                     active.remove(c)
                     any_clamped = True
                 else:
@@ -882,15 +882,30 @@ class ArrayController:
             if not any_clamped:
                 self.bus_voltage = v_bus
                 pack_currents.update(clamped)
+
+                if not is_equalization:
+                    # Post-solve assertion -- clamp and accept small KCL violation
+                    tol = 1.0 + CURRENT_LIMIT_TOLERANCE
+                    for c in conn:
+                        pid = c.pack.pack_id
+                        ik = pack_currents.get(pid, 0.0)
+                        if ik > 0 and ik > c.charge_current_limit * tol:
+                            pack_currents[pid] = c.charge_current_limit
+                        elif ik < 0 and abs(ik) > c.discharge_current_limit * tol:
+                            pack_currents[pid] = -c.discharge_current_limit
+
                 return pack_currents
 
         # Final solve with remaining active packs
         if active:
             sum_g = sum(1.0 / c.pack.r_total for c in active)
             sum_ocv_g = sum(c.pack.ocv_pack / c.pack.r_total for c in active)
-            clamped_sum = sum(clamped.values())
-            if sum_g > 1e-12:
-                v_bus = (sum_ocv_g - clamped_sum) / sum_g
+            if sum_g > MIN_CONDUCTANCE:
+                if is_equalization:
+                    clamped_sum = sum(clamped.values())
+                    v_bus = (sum_ocv_g - clamped_sum) / sum_g
+                else:
+                    v_bus = (sum_ocv_g + residual) / sum_g
                 self.bus_voltage = v_bus
                 for c in active:
                     clamped[c.pack.pack_id] = (v_bus - c.pack.ocv_pack) / c.pack.r_total
@@ -923,10 +938,10 @@ class ArrayController:
             self.compute_array_limits()
 
             if requested_current != 0:
-                pack_currents = self._solve_kirchhoff(conn, requested_current)
+                pack_currents = self._solve_currents(conn, requested_current)
             else:
-                # Fix #10: equalization currents at zero load
-                pack_currents = self._solve_equalization(conn)
+                # Equalization currents at zero load
+                pack_currents = self._solve_currents(conn, 0.0, is_equalization=True)
 
             # 3. Step physics for connected packs with solved currents
             for ctrl in conn:
@@ -969,6 +984,16 @@ def run_scenario(output_dir: str = "."):
     print("=" * 70)
     print()
 
+    # Clear pack ID registry for re-runnability
+    _pack_id_registry.clear()
+
+    try:
+        return _run_scenario_inner(output_dir)
+    finally:
+        _pack_id_registry.clear()
+
+
+def _run_scenario_inner(output_dir: str = "."):
     packs = [
         VirtualPack(pack_id=1, soc=0.45, temperature=AMBIENT_TEMP),
         VirtualPack(pack_id=2, soc=0.55, temperature=AMBIENT_TEMP),
@@ -1117,9 +1142,6 @@ def run_scenario(output_dir: str = "."):
     # Realistic maritime incident: fan failure reduces cooling from 800 to 50 W/°C
     # (natural convection only). High current charging + adjacent machinery heat.
     # I²R at ~300A ≈ 6 kW/pack + 50 kW adjacent machinery heat.
-    REDUCED_COOLING_COEFF = 50.0  # W/°C, natural convection only
-    ADJACENT_HEAT = 50_000.0      # 50 kW from adjacent machinery in engine room
-
     print("[Phase 5] Cooling system failure on Pack 3 -- fan failure during heavy charging")
     print(f"  Normal cooling: {THERMAL_COOLING_COEFF} W/°C → Fan failure: {REDUCED_COOLING_COEFF} W/°C")
     print(f"  Adjacent machinery heat: {ADJACENT_HEAT/1e3:.0f} kW")
