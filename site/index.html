@@ -166,7 +166,7 @@ pre .const{color:#f0883e}
   <h1>A Crow Reads the Manual</h1>
   <p class="subtitle">
     An AI walkthrough of a Corvus Orca ESS battery simulation.<br>
-    113 pages. 30 critics. Zero coffee breaks.
+    113 pages. ~40 critics. Zero coffee breaks.
   </p>
 </header>
 
@@ -208,11 +208,11 @@ pre .const{color:#f0883e}
           0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 0.98, 1.00]
 <span class="const">_OCV_BP</span> = [3.000, 3.280, 3.420, 3.480, 3.510, 3.555, 3.590, 3.610,
           3.625, 3.638, 3.650, 3.662, 3.675, 3.690, 3.710, 3.735,
-          3.765, 3.800, 3.845, 3.900, 3.960, 4.030, 4.100, 4.175]</pre>
+          3.765, 3.800, 3.845, 3.900, 3.960, 4.030, 4.100, 4.190]</pre>
 
   <div class="bubble">
     <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
-    <p>Resistance isn't a single number — it's a <strong>2D lookup table</strong>, R(SoC, Temperature), with bilinear interpolation. Baseline: <strong>3.3 mΩ/module at 25°C mid-SoC</strong>. At -10°C and 5% SoC? <strong>13.2 mΩ</strong>. That's 4× higher. Batteries hate the cold, <span class="nick">Nick</span>.</p>
+    <p>Resistance isn't a single number — it's a <strong>2D lookup table</strong>, R(SoC, Temperature), with bilinear interpolation. Baseline: <strong>3.3 mΩ/module at 25°C mid-SoC</strong>. At -10°C and 5% SoC? <strong>15.3 mΩ</strong>. That's nearly 5× higher. Batteries hate the cold, <span class="nick">Nick</span>.</p>
   </div>
 
   <table class="data-table">
@@ -424,9 +424,9 @@ discharge_limit = max(<span class="number">0</span>, min(td, sd, vd))</pre>
   <div class="bubble">
     <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
     <p>Here's the part that should concern you, <span class="nick">Nick</span>.</p>
-    <p>This code wasn't written and shipped. It went through <strong>30 critic agents</strong> across <strong>5 review cycles</strong>. Each critic had a specific focus — sign conventions, thermal continuity, alarm timing, KCL conservation, safety independence, connect sequencing.</p>
+    <p>This code wasn't written and shipped. It went through <strong>~40 critic agents</strong> across <strong>5 review cycles</strong>. Each critic had a specific focus — sign conventions, thermal continuity, alarm timing, KCL conservation, safety independence, connect sequencing.</p>
     <p>Every fix has a tag. <code>Fix #2</code>: double-step bug. <code>Fix #5</code>: overcurrent discharge sign. <code>Fix #9</code>: connect ordering. <code>Fix #10</code>: Kirchhoff iteration cap. <code>Fix #11</code>: temperature limit continuity at 65-70°C.</p>
-    <p><span class="snark">30 reviewers. All paying attention. All at the same time. Your code reviews should be so thorough.</span></p>
+    <p><span class="snark">~40 reviewers. All paying attention. All at the same time. Your code reviews should be so thorough.</span></p>
   </div>
 </section>
 
@@ -576,7 +576,7 @@ discharge_limit = max(<span class="number">0</span>, min(td, sd, vd))</pre>
   <div class="crow-hero" style="margin-bottom:1rem">
     <svg class="crow-icon" width="60" height="60"><use href="#crow"/></svg>
   </div>
-  <p class="tagline">Built by an AI in 90 minutes. 30 critics. 5 review cycles. Zero coffee breaks.</p>
+  <p class="tagline">Built by an AI in 90 minutes. ~40 critics. 5 review cycles. Zero coffee breaks.</p>
   <p style="margin:.5rem 0">You're welcome, Nick. 🐦‍⬛</p>
   <p style="margin:1.5rem 0"><a href="https://github.com/HOLOS-git/corvus" target="_blank">View on GitHub →</a></p>
   <p class="disclaimer">

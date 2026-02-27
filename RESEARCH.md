@@ -68,7 +68,7 @@ R_PACK_NOMINAL = 72.6e-3   # Ω, 22 modules in series
 ```python
 THERMAL_MASS = 1_268_000    # J/°C (1.27 MJ/°C) for full pack
 THERMAL_COOLING_COEFF = 800  # W/°C (forced air, moderate airflow)
-AMBIENT_TEMP = 25.0          # °C
+AMBIENT_TEMP = 40.0          # °C -- realistic engine room
 ```
 
 **Confidence: MEDIUM** — cell specific heat is well-established, but exact pack composition and airflow characteristics are estimated.
@@ -306,7 +306,7 @@ This is standard circuit theory (superposition / nodal analysis) applied to batt
 | Module capacity | 128 Ah | Corvus datasheet |
 | Module weight | 60 kg | Corvus datasheet |
 | Module energy | 5.6 kWh | Corvus datasheet |
-| Pack voltage range | ~924-1286 V | OCV curve × 308 |
+| Pack voltage range | ~924–1291 V | OCV curve × 308 |
 | Pack nominal voltage | ~1100 V | At ~50% SoC |
 | Max C-rate (charge/discharge) | 3C / 5C | Figures 28-30 (BOL, optimal temp) |
 | THERMAL_MASS | 1,268,000 J/°C | Composite: 70% cells × 1050 + 30% non-cell × 500 |

@@ -151,10 +151,10 @@ These have clear fixes derivable from the manual text.
 Document these in README as known limitations of the demo.
 
 ### 3.1 Single Lumped Cell Model
-- **Reality:** Each module has 12 cells, each monitored individually. Alarms trigger on min/max cell values.
+- **Reality:** Each module has 14 cells, each monitored individually. Alarms trigger on min/max cell values.
 - **Demo simplification:** All cells assumed identical → single voltage/temperature per pack.
 - **Impact:** Can't demonstrate cell imbalance, per-cell monitoring, balancing (Section 7.6.1).
-- **Disclaimer:** "Demo uses a lumped single-cell model per pack. Real Orca ESS monitors each of 264 cells individually."
+- **Disclaimer:** "Demo uses a lumped single-cell model per pack. Real Orca ESS monitors each of 308 cells individually."
 
 ### 3.2 Missing POWER_SAVE, NOT_READY, MAINTENANCE, OFF Transitions
 - **Reality:** Full state machine with 7+ modes (Table 15, Section 7.1).

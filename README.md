@@ -26,13 +26,13 @@ python corvus_demo.py
 ```
 
 **Outputs:**
-- `corvus_output.csv` — time series of all pack states (~865 rows)
+- `corvus_output.csv` — time series of all pack states (~1,350 rows)
 - `corvus_plot.png` — 5-panel plot showing the full scenario
 
 ## v4 Changes from v3
 
 1. **2D resistance lookup** — R(SoC, T) with bilinear interpolation; baseline 3.3 mΩ/module from manual p.32
-2. **Realistic thermal mass** — 1,386,000 J/°C (22 modules × 60 kg × 1050 J/kg/K), up from 5000 J/°C
+2. **Realistic thermal mass** — 1,268,000 J/°C (composite: 70% cells × 1050 + 30% non-cell × 500), up from 5000 J/°C
 3. **Forced-air cooling** — 800 W/°C coefficient
 4. **24-point NMC 622 OCV curve** from literature
 5. **Figure 28/29/30 breakpoints** — temperature, SoC, and SEV current limits from extracted manual figures
@@ -88,7 +88,7 @@ Pack 3 reconnects to bus, then all packs disconnect cleanly.
 
 | Component | Description |
 |-----------|-------------|
-| `VirtualPack` | OCV(SoC) + R(SoC,T) equivalent circuit, coulomb counting, first-order thermal (1.39 MJ/°C) |
+| `VirtualPack` | OCV(SoC) + R(SoC,T) equivalent circuit, coulomb counting, first-order thermal (1.27 MJ/°C) |
 | `PackController` | 7-mode state machine, pre-charge timing, current limits (temp/SoC/SEV), alarm system with HW safety independence |
 | `ArrayController` | Multi-pack orchestration, Kirchhoff bus solver with equalization, connect ordering |
 | `run_scenario()` | 8-phase test harness exercising all behaviors |
@@ -97,12 +97,12 @@ Pack 3 reconnects to bus, then all packs disconnect cleanly.
 
 | Parameter | Value | Source |
 |-----------|-------|--------|
-| R_module (25°C, mid-SoC) | 3.3 mΩ | Corvus manual p.32 |
+| R_module (nominal) | 3.3 mΩ | Corvus manual p.32 |
 | R_pack (22 modules) | 72.6 mΩ | Derived |
 | Cells per module | 14 | 50V / 3.6V nominal |
 | Cells per pack | 308 | 14 × 22 |
 | Module capacity | 128 Ah | Section 1.3 |
-| Thermal mass | 1,386,000 J/°C | 22 × 60 kg × 1050 J/(kg·K) |
+| Thermal mass | 1,268,000 J/°C | Composite: 70% cells × 1050 + 30% non-cell × 500 |
 | Cooling coefficient | 800 W/°C | Forced-air estimate |
 | Ambient temperature | 40°C | Engine room estimate |
 | Pre-charge duration | 5s | Table 16 |
@@ -133,7 +133,7 @@ Pack 3 reconnects to bus, then all packs disconnect cleanly.
 
 4. **No pre-charge inrush current modeling** — Timer-only pre-charge; no RC circuit or current waveform.
 
-5. **No cell balancing or per-cell monitoring** — Lumped single-cell model. Real Orca ESS monitors each of 264 cells individually (Section 7.6.1).
+5. **No cell balancing or per-cell monitoring** — Lumped single-cell model. Real Orca ESS monitors each of 308 cells individually (Section 7.6.1).
 
 6. **No aging, SOH, capacity fade, or calendar degradation** — Uses BOL curves for Figure 29. No self-discharge.
 

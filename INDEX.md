@@ -23,7 +23,7 @@ Corvus is a demonstration project: a working simulation of Corvus Energy's Orca 
 | Path | Lines | Description |
 |------|-------|-------------|
 | `corvus_demo.py` | 1,356 | Complete v4 simulation — VirtualPack, PackController, ArrayController, 8-phase scenario |
-| `corvus_plot.png` | — | Generated 6-panel plot (SoC, voltage, temperature, current limits, modes, per-pack current) |
+| `corvus_plot.png` | — | Generated 5-panel plot (SoC, voltage, temperature, current/limits, modes) |
 | `corvus_output.csv` | 1,346 | Time-series output from demo scenario |
 
 ### C Port
