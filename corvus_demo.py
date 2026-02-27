@@ -1,20 +1,14 @@
 #!/usr/bin/env python3
 """
-+======================================================================+
-|  CORVUS ORCA ESS -- What Your BMS Does (According to Your Own        |
-|  Manual)  v4                                                         |
-|                                                                      |
-|  A faithful reimplementation of the Orca ESS Pack <-> EMS interface  |
-|  based entirely on Corvus Energy document 1007768 Rev V.             |
-|                                                                      |
-|  We read your integrator manual. All 113 pages. You're welcome.      |
-+======================================================================+
+Corvus Orca ESS Simulation v4
 
-Every behavior in this file cites the exact manual section it implements.
-If we got something wrong, it's because your manual was ambiguous, not
-because we didn't read it.
+Independent simulation of Orca ESS interface behaviors for integration
+testing and educational purposes. Not affiliated with, endorsed by, or
+derived from Corvus Energy's proprietary software. Interface behaviors
+are implemented from publicly-available integrator documentation for
+interoperability purposes.
 
-Reference: 1007768 Rev V -- Orca ESS Integrator Manual (Corvus Energy)
+Reference: Corvus Energy Orca ESS integrator documentation
 
 v4 Changes:
   - 2D resistance lookup R(SoC, T) with bilinear interpolation (3.3 mΩ/module baseline)
@@ -47,6 +41,8 @@ LIMITATIONS:
   - Equalization currents may have small KCL residual after per-pack clamping
   - Array current limits use min×N per manual Section 7.4 example (conservative)
   - Warning hysteresis deadbands and fault reset hold time are engineering choices, not from manual
+  - Remaining packs connect based on voltage match only; manual §7.2.1 also gates on SoC convergence between connected and ready packs
+  - Thermal model is lumped per-pack (no cell-to-cell thermal gradients or module-level thermal stratification)
 """
 
 from __future__ import annotations
@@ -365,8 +361,7 @@ class PackController:
 
     def request_connect(self, bus_voltage: float, for_charge: bool = True) -> bool:
         """
-        Section 7.2: "Upon receipt of a connect command, will evaluate
-        whether it is safe to close its contactors."
+        Section 7.2: Evaluate safety conditions before closing contactors.
         Voltage match: within 1.2V × num_modules.
         """
         if self.mode != PackMode.READY:
@@ -406,9 +401,8 @@ class PackController:
 
     def manual_fault_reset(self) -> bool:
         """
-        Section 6.3.5: "Faults are latched after being triggered and require
-        a manual alarm reset action by a human operator. This must not be
-        automated."
+        Section 6.3.5: Faults are latched and require manual operator reset.
+        Automated reset is prohibited per manual.
 
         v4: Requires conditions below threshold for FAULT_RESET_HOLD_TIME (60s).
         Distinguishes SW faults from HW safety faults per Section 6.2.
@@ -549,11 +543,9 @@ class PackController:
         elif self.has_warning:
             self._warning_active_time += dt
             if self._warning_active_time >= WARNING_HOLD_TIME:
-                # Also check no overcurrent before clearing
-                if not oc_charge and not oc_discharge:
-                    self.has_warning = False
-                    self.warning_message = ""
-                    self._warning_active_time = 0.0
+                self.has_warning = False
+                self.warning_message = ""
+                self._warning_active_time = 0.0
 
         # -- OC fault (5s) -- Fix #6: ONLY at T < 0°C AND charging per Table 13
         if t < 0.0 and oc_charge:
@@ -953,8 +945,8 @@ def run_scenario(output_dir: str = "."):
     8. Reconnection and disconnect
     """
     print("=" * 70)
-    print("  CORVUS ORCA ESS DEMO v4 -- What Your BMS Does")
-    print("  Reference: 1007768 Rev V -- Orca ESS Integrator Manual")
+    print("  CORVUS ORCA ESS DEMO v4")
+    print("  Reference: Corvus Energy Orca ESS integrator documentation")
     print("=" * 70)
     print()
 
@@ -1232,7 +1224,7 @@ def run_scenario(output_dir: str = "."):
     plot_path = os.path.join(output_dir, "corvus_plot.png")
     _make_plot(data_rows, events, plot_path)
     print(f"[Output] Plot: {plot_path}")
-    print("\nDone. We read your manual so you don't have to.")
+    print("\nDone.")
 
 
 def _make_plot(data, events, path):
@@ -1244,7 +1236,7 @@ def _make_plot(data, events, path):
     fig, axes = plt.subplots(5, 1, figsize=(16, 20), sharex=True)
     fig.suptitle(
         "Corvus Orca ESS Demo v4 -- 3-Pack Scenario\n"
-        "Reference: 1007768 Rev V -- Orca ESS Integrator Manual",
+        "Reference: Corvus Energy Orca ESS integrator documentation",
         fontsize=14, fontweight='bold'
     )
 

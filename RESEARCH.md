@@ -111,9 +111,9 @@ OCV_VALUES = [  # Volts per cell
 
 ---
 
-## 4. Current Limit Curves (Figures 28, 29, 30 from Integrator Manual)
+## 4. Current Limit Curves (derived from integrator documentation)
 
-### Figure 28: Temperature-Based Current Limit
+### Temperature-Based Current Limit (derating curve from integrator documentation)
 
 **Charge Limit (positive C-rate):**
 
@@ -149,7 +149,7 @@ OCV_VALUES = [  # Volts per cell
 
 **Notes:** Warning level ~58°C, Fault level ~63°C. Alternate current sensor option limits at ~3.5-3.8C.
 
-### Figure 29: SoC-Based Current Limit
+### SoC-Based Current Limit (derating curve from integrator documentation)
 
 **BOL Charge Limit:**
 
@@ -201,7 +201,7 @@ OCV_VALUES = [  # Volts per cell
 | 50      | -4.5   |
 | 100     | -4.5   |
 
-### Figure 30: SEV-Based Current Limit
+### SEV-Based Current Limit (derating curve from integrator documentation)
 
 **Charge Limit:**
 
@@ -225,7 +225,7 @@ OCV_VALUES = [  # Volts per cell
 
 **Reference lines:** Fault level = 3000 mV, Warning level = 3200 mV.
 
-**Confidence: MEDIUM-HIGH** — extracted from PDF images via vision model. Some interpolation involved but breakpoints are clear.
+**Confidence: MEDIUM-HIGH** — derived from integrator documentation. Some interpolation involved but breakpoints are clear.
 
 ---
 

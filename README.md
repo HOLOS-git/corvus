@@ -1,12 +1,18 @@
 # Corvus Orca ESS Demo v4
 
-A faithful single-file Python reimplementation of the Corvus Energy Orca ESS Pack ⇄ EMS interface, grounded entirely in their public integrator manual.
+> **Disclaimer:** Independent simulation of Orca ESS interface behaviors for
+> integration testing and educational purposes. Not affiliated with, endorsed
+> by, or derived from Corvus Energy's proprietary software. Interface behaviors
+> are implemented from publicly-available integrator documentation for
+> interoperability purposes.
 
-**Reference:** 1007768 Rev V — Orca ESS Integrator Manual (Corvus Energy)
+A single-file Python implementation of the Corvus Energy Orca ESS Pack ⇄ EMS interface, grounded in publicly-available integrator documentation.
+
+**Reference:** Corvus Energy Orca ESS integrator documentation (1007768 Rev V for traceability)
 
 ## What This Is
 
-A runnable demo that implements the core Pack Controller behaviors documented in Corvus Energy's Orca ESS Integrator Manual, driving them with a physically-grounded equivalent-circuit battery model. Every behavior cites the exact manual section it implements.
+A runnable demo that implements the core Pack Controller behaviors documented in Corvus Energy Orca ESS integrator documentation, driving them with a physically-grounded equivalent-circuit battery model. Every behavior cites the exact manual section it implements.
 
 ## How to Run
 
@@ -144,3 +150,7 @@ Pack 3 reconnects to bus, then all packs disconnect cleanly.
 14. **No sensor-based current limit** — Section 7.4.4 (PDM current sensor rating) not implemented.
 
 15. **OC warning simulation** — Phase 4 injects current directly to bypass Kirchhoff solver, simulating an EMS that ignores BMS limits.
+
+16. **SoC convergence not modeled** — Remaining packs connect based on voltage match only; manual §7.2.1 also gates on SoC convergence between connected and ready packs.
+
+17. **Lumped thermal model** — Thermal model is lumped per-pack (no cell-to-cell thermal gradients or module-level thermal stratification).

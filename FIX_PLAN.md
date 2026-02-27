@@ -14,9 +14,9 @@ These have clear fixes derivable from the manual text.
 - **Ref:** Section 7.2.4, Table 16
 
 ### 1.2 Connect-to-Charge Ordering Wrong
-- **What's wrong:** Code SoC-sorts all packs and connects them sequentially. Manual says only the *first* pack connects by lowest SoC; remaining packs "attempt to connect at the same time" once the first is connected and their SoC/voltage is within range.
+- **What's wrong:** Code SoC-sorts all packs and connects them sequentially. Manual says only the *first* pack connects by lowest SoC; remaining packs connect simultaneously once the first is connected and their SoC/voltage is within range.
 - **Fix:** Connect lowest-SoC pack first, then attempt all remaining simultaneously (voltage/SoC gated, not SoC-ordered).
-- **Ref:** Section 7.2.1: "Once at least one pack is connected, the BMS will then attempt to connect the remaining packs which have values for SOC and voltage within acceptable range for connection at the same time (without ordering based on their SOC level)."
+- **Ref:** Section 7.2.1 — Manual specifies first-pack-then-simultaneous connection ordering: remaining packs connect simultaneously (not SoC-ordered) once first pack is on-bus and voltage/SoC are in range.
 
 ### 1.3 `for_charge` Parameter Ignored
 - **What's wrong:** `request_connect(bus_voltage, for_charge=True)` accepts `for_charge` but never uses it.
@@ -36,12 +36,12 @@ These have clear fixes derivable from the manual text.
 - **Ref:** Section 7.4.3, Figure 30
 
 ### 1.6 Warning Derating Is Fabricated
-- **What's wrong:** Code applies blanket `0.5×` to current limits on any warning. Manual says: "the maximum allowable charge/discharge current of the pack *may* be reduced" — it doesn't specify 50%.
+- **What's wrong:** Code applies blanket `0.5×` to current limits on any warning. Manual indicates current limits may be reduced on warning, but does not specify a fixed multiplier.
 - **Fix:** Remove the blanket 50% multiplier. Instead, the current limits should naturally reflect the condition that caused the warning (since temp/SoC/SEV limits already handle derating). If a warning is active, the limit *is already reduced* by the parametric derating. The warning is an *indication*, not an additional derating layer.
-- **Ref:** Section 6.3.4: "depending on the nature of the warning"
+- **Ref:** Section 6.3.4 — manual states current reduction depends on warning type, not a fixed multiplier.
 
 ### 1.7 Automated Fault Reset Contradicts Manual
-- **What's wrong:** `reset_faults()` is called programmatically in the demo scenario. Manual explicitly says "This must not be automated."
+- **What's wrong:** `reset_faults()` is called programmatically in the demo scenario. Manual requires latched faults with manual operator reset; automated reset is prohibited (Section 6.3.5).
 - **Fix:** Keep the method but rename it `manual_fault_reset()` and add prominent comments. In the demo, frame it as "simulating operator action" with a print statement. Never auto-call it in a loop.
 - **Ref:** Section 6.3.5
 
@@ -65,7 +65,7 @@ These have clear fixes derivable from the manual text.
 ### 1.11 OCV Curve: 0% SoC = UV Fault Threshold
 - **What's wrong:** `_OCV_BP[0] = 3.00V` exactly equals `SE_UNDER_VOLTAGE_FAULT = 3.000V`. A pack at 0% SoC immediately faults — no safety buffer.
 - **Fix:** Set 0% SoC OCV to ~3.10V (above UV fault, below UV warning of 3.2V). This gives a buffer zone. Alternatively, shift the SoC range so 0% maps to a slightly higher voltage.
-- **Ref:** Table 13 (UV fault = 3.0V), Section 7.3 ("will also continue below SEV of 3.0 V and can lead to permanent damage")
+- **Ref:** Table 13 (UV fault = 3.0V), Section 7.3 — manual warns continued operation below 3.0V SEV risks permanent cell damage.
 
 ### 1.12 No `__main__` Guard
 - **What's wrong:** `matplotlib.use('Agg')` and plot imports execute on import. There IS a `__main__` guard at the bottom, but matplotlib is configured at module level.
@@ -74,7 +74,7 @@ These have clear fixes derivable from the manual text.
 ### 1.13 Missing `complete_connection` Voltage Recheck
 - **What's wrong:** Once a pack enters CONNECTING, `complete_connection()` transitions it to CONNECTED without rechecking that voltage match is still valid (bus voltage may have changed since request_connect).
 - **Fix:** Pass current bus_voltage to `complete_connection()` and recheck the delta before closing contactors.
-- **Ref:** Section 7.2: "pack controller checks that... bus and load voltages are within safe limits"
+- **Ref:** Section 7.2 — pack controller verifies bus and load voltages are within safe limits before closing contactors.
 
 ### 1.14 Wrong Section Citations
 - **What's wrong:** Several comments cite wrong section numbers.
@@ -136,7 +136,7 @@ These have clear fixes derivable from the manual text.
 - **Search queries:**
   - `parallel battery pack bus voltage Kirchhoff model current distribution`
   - `battery management system parallel pack current sharing simulation`
-- **Manual hints:** Section 7.4 example: "if one pack is at 10A and nine other packs are at 386A" — confirms packs can have different currents.
+- **Manual hints:** Section 7.4 example confirms packs can have different per-pack current limits on a shared bus.
 
 ### 2.8 Sensor-Based Current Limit
 - **What's wrong:** Not implemented. Manual says some PDMs have lower-rated current sensors.
@@ -191,8 +191,8 @@ Document these in README as known limitations of the demo.
 
 ### 4.1 `compute_array_limits` Uses min×N
 - **Finding:** Should use sum of individual limits instead of min(per-pack) × N.
-- **Manual says:** "current is limited by the connected pack with the lowest pack current limit. For example, if one pack is at 10A and nine other packs are at 386A, the array level current limit will be 100A" (Section 7.4).
-- **Verdict:** 10A × 10 packs = 100A. **The manual explicitly confirms min×N.** This is correct as implemented.
+- **Manual says:** Array limit uses the minimum per-pack limit multiplied by pack count. Manual example: with one pack at 10A limit and nine at 386A, array limit = 10A × 10 = 100A (Section 7.4).
+- **Verdict:** min×N confirmed by manual example. This is correct as implemented.
 
 ### 4.2 Current Force-Split Equally
 - **Finding:** Current should distribute based on voltage/resistance, not equally.
