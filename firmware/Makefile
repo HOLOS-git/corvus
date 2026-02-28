@@ -10,10 +10,12 @@ CFLAGS_DBG = $(CFLAGS) -g -fsanitize=address,undefined -fno-omit-frame-pointer
 
 # Source files
 SRC_CORE = src/bms_bq76952.c src/bms_monitor.c src/bms_protection.c \
-           src/bms_contactor.c src/bms_can.c src/bms_state.c
+           src/bms_contactor.c src/bms_can.c src/bms_state.c \
+           src/bms_current_limit.c src/bms_soc.c src/bms_balance.c src/bms_nvm.c
 SRC_RTOS = rtos/bms_tasks.c
 SRC_TEST = test/test_main.c test/test_bq76952.c test/test_protection.c \
-           test/test_contactor.c test/test_can.c test/test_state.c
+           test/test_contactor.c test/test_can.c test/test_state.c \
+           test/test_current_limit.c test/test_soc.c test/test_balance.c test/test_nvm.c
 HAL_MOCK = hal/hal_mock.c
 HAL_STM32 = hal/hal_stm32f4.c
 

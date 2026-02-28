@@ -46,6 +46,12 @@ typedef struct {
 void bms_protection_init(bms_protection_state_t *prot);
 
 /**
+ * Set NVM context for fault logging. Pass NULL to disable.
+ * Forward-declared; include bms_nvm.h for the full type.
+ */
+void bms_protection_set_nvm(void *nvm);
+
+/**
  * Run protection checks for one cycle.
  * @param prot   protection state
  * @param pack   pack data (reads cell_mv[], temps, current; writes faults)

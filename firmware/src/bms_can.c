@@ -1,12 +1,17 @@
 /**
  * bms_can.c — CAN TX/RX with message framing per Orca Modbus register map
  *
+ * Simplified demo protocol — not J1939 or Modbus-over-CAN.
+ *
  * CAN 2.0B standard frame format.
  * Message IDs mapped from Orca Modbus TCP register groups (Appendix A):
  *   0x100: Array status (regs 0–25)
+ *   0x105: Current limits + SoC
+ *   0x108: Heartbeat
  *   0x110: Pack status (regs 50–97)
  *   0x120: Alarms (regs 400+)
- *   0x130: Cell voltages
+ *   0x130: Cell voltage summary
+ *   0x131+: Cell voltage broadcast
  *   0x140: Temperatures + current limits
  *   0x200: EMS commands (regs 300–343)
  *   0x210: EMS heartbeat
@@ -154,24 +159,81 @@ int32_t bms_can_decode_ems_command(const bms_can_frame_t *frame,
 void bms_can_encode_heartbeat(uint32_t uptime_ms, bms_can_frame_t *frame)
 {
     memset(frame, 0, sizeof(*frame));
-    frame->id = CAN_ID_ARRAY_STATUS;
+    frame->id = 0x108U;  /* dedicated heartbeat CAN ID */
     frame->dlc = 8U;
     pack_u32_be(&frame->data[0], uptime_ms);
 }
 
+/* ── Encode current limits (0x105) ─────────────────────────────────── */
+
+void bms_can_encode_limits(const bms_pack_data_t *pack,
+                            bms_can_frame_t *frame)
+{
+    memset(frame, 0, sizeof(*frame));
+    frame->id = 0x105U;
+    frame->dlc = 8U;
+    pack_u32_be(&frame->data[0], (uint32_t)pack->charge_limit_ma);
+    pack_u32_be(&frame->data[4], (uint32_t)pack->discharge_limit_ma);
+}
+
+/* ── Encode cell voltage broadcast (0x131+) ────────────────────────── */
+
+void bms_can_encode_cell_broadcast(const bms_pack_data_t *pack,
+                                    uint8_t frame_idx,
+                                    bms_can_frame_t *frame)
+{
+    uint16_t base;
+    uint8_t i;
+
+    memset(frame, 0, sizeof(*frame));
+    frame->id = 0x131U + (uint32_t)frame_idx;
+    frame->dlc = 8U;
+
+    base = (uint16_t)frame_idx * 4U;
+    for (i = 0U; i < 4U; i++) {
+        uint16_t idx = base + i;
+        uint16_t mv = 0U;
+        if (idx < BMS_SE_PER_PACK) {
+            mv = pack->cell_mv[idx];
+        }
+        pack_u16_be(&frame->data[i * 2U], mv);
+    }
+}
+
 /* ── Periodic TX ───────────────────────────────────────────────────── */
+
+/* Cell voltage broadcast cycling state */
+static uint8_t s_cell_broadcast_idx;
 
 void bms_can_tx_periodic(const bms_pack_data_t *pack)
 {
     bms_can_frame_t frame;
+    /* Total broadcast frames needed: ceil(308/4) = 77 */
+    uint8_t max_broadcast_idx = (uint8_t)((BMS_SE_PER_PACK + 3U) / 4U);
 
     /* Status frame */
     bms_can_encode_status(pack, &frame);
     hal_can_transmit(&frame);
 
+    /* Current limits frame */
+    bms_can_encode_limits(pack, &frame);
+    hal_can_transmit(&frame);
+
+    /* Heartbeat frame */
+    bms_can_encode_heartbeat(pack->uptime_ms, &frame);
+    hal_can_transmit(&frame);
+
     /* Voltage summary frame */
     bms_can_encode_voltages(pack, &frame);
     hal_can_transmit(&frame);
+
+    /* Cell voltage broadcast — one module's worth per cycle (4 cells) */
+    bms_can_encode_cell_broadcast(pack, s_cell_broadcast_idx, &frame);
+    hal_can_transmit(&frame);
+    s_cell_broadcast_idx++;
+    if (s_cell_broadcast_idx >= max_broadcast_idx) {
+        s_cell_broadcast_idx = 0U;
+    }
 
     /* Temperature + limits frame */
     bms_can_encode_temps(pack, &frame);

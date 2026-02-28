@@ -1,11 +1,18 @@
 /**
  * bms_can.h — CAN driver + message framing per Orca Modbus register map
  *
+ * Simplified demo protocol — not J1939 or Modbus-over-CAN.
+ *
  * CAN 2.0B standard frame format.
  * Message IDs mapped from Orca Modbus TCP register groups:
  *   0x100: Array status (regs 0–25)
+ *   0x105: Current limits + SoC
+ *   0x108: Heartbeat
  *   0x110: Pack status (regs 50–97)
  *   0x120: Pack alarms (regs 400+)
+ *   0x130: Cell voltage summary
+ *   0x131+: Cell voltage broadcast (4 cells per frame)
+ *   0x140: Temperature + limits
  *   0x200: EMS commands (regs 300–343)
  *
  * Reference: Orca ESS Integrator Manual §8.2, Appendix A
@@ -72,12 +79,33 @@ int32_t bms_can_decode_ems_command(const bms_can_frame_t *frame,
                                     bms_ems_command_t *cmd);
 
 /**
- * Encode heartbeat frame (ID 0x100 + offset).
+ * Encode heartbeat frame (ID 0x108).
  * Byte layout:
  *   [0:3]  uptime_ms (uint32 BE)
  *   [4:7]  reserved
  */
 void bms_can_encode_heartbeat(uint32_t uptime_ms, bms_can_frame_t *frame);
+
+/**
+ * Encode current limits + SoC frame (ID 0x105).
+ * Byte layout:
+ *   [0:3]  max_charge_ma (int32 BE)
+ *   [4:7]  max_discharge_ma (int32 BE) — replaces SoC in data for full range
+ * Note: SoC is already in status frame byte[5].
+ */
+void bms_can_encode_limits(const bms_pack_data_t *pack,
+                            bms_can_frame_t *frame);
+
+/**
+ * Encode cell voltage broadcast frame (ID 0x131+).
+ * 4 cell voltages per frame (uint16 BE each).
+ * @param pack       pack data
+ * @param frame_idx  broadcast frame index (incremented by caller)
+ * @param frame      output CAN frame
+ */
+void bms_can_encode_cell_broadcast(const bms_pack_data_t *pack,
+                                    uint8_t frame_idx,
+                                    bms_can_frame_t *frame);
 
 /**
  * Transmit all periodic status frames. Called from CAN TX task.

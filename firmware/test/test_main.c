@@ -66,6 +66,10 @@ extern void test_protection_suite(void);
 extern void test_contactor_suite(void);
 extern void test_can_suite(void);
 extern void test_state_suite(void);
+extern void test_current_limit_suite(void);
+extern void test_soc_suite(void);
+extern void test_balance_suite(void);
+extern void test_nvm_suite(void);
 
 /* ── Main ──────────────────────────────────────────────────────────── */
 
@@ -87,6 +91,18 @@ int main(void)
 
     fprintf(stderr, "\n[SUITE] State Machine\n");
     test_state_suite();
+
+    fprintf(stderr, "\n[SUITE] Current Limits\n");
+    test_current_limit_suite();
+
+    fprintf(stderr, "\n[SUITE] SoC Estimation\n");
+    test_soc_suite();
+
+    fprintf(stderr, "\n[SUITE] Cell Balancing\n");
+    test_balance_suite();
+
+    fprintf(stderr, "\n[SUITE] NVM Fault Logging\n");
+    test_nvm_suite();
 
     fprintf(stderr, "\n=== Results: %d/%d passed, %d failed ===\n\n",
             g_tests_passed, g_tests_run, g_tests_failed);

@@ -15,8 +15,25 @@
  */
 
 #include "bms_protection.h"
+#include "bms_nvm.h"
 #include "bms_config.h"
 #include <string.h>
+
+/* Global NVM context for fault logging — initialized externally */
+static bms_nvm_ctx_t *s_nvm_ctx;
+
+void bms_protection_set_nvm(void *nvm)
+{
+    s_nvm_ctx = (bms_nvm_ctx_t *)nvm;
+}
+
+static void log_fault_to_nvm(uint32_t timestamp, uint8_t type,
+                              uint8_t cell, uint16_t val)
+{
+    if (s_nvm_ctx != NULL) {
+        bms_nvm_log_fault(s_nvm_ctx, timestamp, type, cell, val);
+    }
+}
 
 /* ── Leaky integrator helpers ──────────────────────────────────────── */
 
@@ -158,6 +175,7 @@ void bms_protection_run(bms_protection_state_t *prot,
             if (prot->ov_timer_ms[i] >= BMS_SE_FAULT_DELAY_MS) {
                 pack->faults.cell_ov = 1U;
                 pack->fault_latched = true;
+                log_fault_to_nvm(pack->uptime_ms, 1U, (uint8_t)i, pack->cell_mv[i]);
                 BMS_LOG("OV fault: cell %u = %u mV", i, pack->cell_mv[i]);
                 return;
             }
@@ -175,6 +193,7 @@ void bms_protection_run(bms_protection_state_t *prot,
             if (prot->uv_timer_ms[i] >= BMS_SE_FAULT_DELAY_MS) {
                 pack->faults.cell_uv = 1U;
                 pack->fault_latched = true;
+                log_fault_to_nvm(pack->uptime_ms, 2U, (uint8_t)i, pack->cell_mv[i]);
                 BMS_LOG("UV fault: cell %u = %u mV", i, pack->cell_mv[i]);
                 return;
             }
@@ -194,6 +213,7 @@ void bms_protection_run(bms_protection_state_t *prot,
                     if (prot->ot_timer_ms[sensor_idx] >= BMS_SE_FAULT_DELAY_MS) {
                         pack->faults.cell_ot = 1U;
                         pack->fault_latched = true;
+                        log_fault_to_nvm(pack->uptime_ms, 3U, (uint8_t)sensor_idx, (uint16_t)t);
                         BMS_LOG("OT fault: sensor %u = %d deci-C", sensor_idx, t);
                         return;
                     }

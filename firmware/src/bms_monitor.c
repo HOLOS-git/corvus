@@ -16,6 +16,12 @@
 #include "bms_bq76952.h"
 #include "bms_hal.h"
 #include "bms_config.h"
+#include "bms_soc.h"
+#include "bms_current_limit.h"
+#include "bms_balance.h"
+
+/* Module-level balance state */
+static bms_balance_state_t s_balance;
 
 void bms_monitor_init(bms_pack_data_t *pack)
 {
@@ -30,6 +36,9 @@ void bms_monitor_init(bms_pack_data_t *pack)
     pack->max_temp_deci_c = -400; /* -40.0°C */
     pack->min_temp_deci_c = 7000; /* 700.0°C */
     pack->soc_hundredths = 5000U; /* 50.00% default */
+
+    bms_soc_init(pack->soc_hundredths);
+    bms_balance_init(&s_balance);
 }
 
 void bms_monitor_read_modules(bms_pack_data_t *pack)
@@ -130,5 +139,17 @@ void bms_monitor_run(bms_pack_data_t *pack)
 {
     bms_monitor_read_modules(pack);
     bms_monitor_aggregate(pack);
+
+    /* Update SoC after cell readings */
+    bms_soc_update(pack, BMS_MONITOR_PERIOD_MS);
+
+    /* Compute current limits from derating curves */
+    bms_current_limit_compute(pack,
+                              &pack->charge_limit_ma,
+                              &pack->discharge_limit_ma);
+
+    /* Run cell balancing */
+    bms_balance_run(&s_balance, pack);
+
     pack->uptime_ms += BMS_MONITOR_PERIOD_MS;
 }
