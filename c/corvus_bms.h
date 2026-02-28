@@ -48,7 +48,7 @@ extern "C" {
 
 /* Pack parameters -- Orca configuration */
 #define BMS_NUM_MODULES               22
-#define BMS_CELLS_PER_MODULE          14       /* 14 SE per module */
+#define BMS_CELLS_PER_MODULE          14       /* 14 series elements (SE) per module — SE may contain parallel cells */
 #define BMS_NOMINAL_CAPACITY_AH      128.0
 #define BMS_NUM_CELLS_SERIES          (BMS_NUM_MODULES * BMS_CELLS_PER_MODULE) /* 308 */
 
@@ -90,7 +90,7 @@ extern "C" {
 #define BMS_CURRENT_LIMIT_TOLERANCE  0.01
 
 /* Array sizing */
-#define BMS_MAX_PACKS                8         /* max packs per array */
+#define BMS_MAX_PACKS                16        /* max packs per array (manual Section 7) */
 
 /* Fault message buffer */
 #define BMS_MSG_LEN                256

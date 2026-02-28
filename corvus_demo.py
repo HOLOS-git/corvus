@@ -81,7 +81,7 @@ VOLTAGE_MATCH_PER_MODULE = 1.2     # V per module
 
 # Pack parameters -- Orca configuration
 NUM_MODULES = 22                   # 22 Orca modules connected in series
-CELLS_PER_MODULE = 14              # 14 SE per module (50V / 3.6V nominal) per RESEARCH.md
+CELLS_PER_MODULE = 14              # 14 series elements (SE) per module — SE may contain parallel cells (50V / 3.6V nominal) per RESEARCH.md
 NOMINAL_CAPACITY_AH = 128.0        # Section 1.3: "For Orca 1C is 128A"
 NUM_CELLS_SERIES = NUM_MODULES * CELLS_PER_MODULE  # 308
 
