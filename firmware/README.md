@@ -65,6 +65,12 @@ make stm32     # requires arm-none-eabi-gcc
 make clean
 ```
 
+## Demo Output
+
+![Firmware Demo Plot](../firmware_plot.png)
+
+*5-panel output from `make demo`: SoC, cell voltage with alarm thresholds (Table 13), temperature with OT thresholds, pack current with charge/discharge limits, and BMS mode state machine. Demonstrates full lifecycle: init → charge → OV warning → OT fault → cool-down/reset → reconnect → discharge → shutdown.*
+
 ## Key Design Choices
 
 - **No floats** — all values are fixed-point (mV, mA, deci-°C, hundredths-%)
