@@ -99,8 +99,8 @@ Pack 3 reconnects to bus, then all packs disconnect cleanly.
 |-----------|-------|--------|
 | R_module (nominal) | 3.3 mΩ | Corvus manual p.32 |
 | R_pack (22 modules) | 72.6 mΩ | Derived |
-| Cells per module | 14 | 50V / 3.6V nominal |
-| Cells per pack | 308 | 14 × 22 |
+| Series elements (SE) per module | 14 | 50V / 3.6V nominal |
+| SE per pack | 308 | 14 × 22 |
 | Module capacity | 128 Ah | Section 1.3 |
 | Thermal mass | 1,268,000 J/°C | Composite: 70% cells × 1050 + 30% non-cell × 500 |
 | Cooling coefficient | 800 W/°C | Forced-air estimate |

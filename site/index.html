@@ -192,7 +192,7 @@ pre .const{color:#f0883e}
       <li><strong>A hardware safety layer</strong> — independent of software alarms, because your manual says it should be, and we actually read that part</li>
       <li><strong>Leaky fault timers</strong> — because hard-resetting timers on transient recovery is a known vulnerability, and we fixed it before your own team mentioned it</li>
     </ul>
-    <p>We then wrote the whole thing <em>again</em> in C. Zero dynamic allocation. Embedded-ready. 123 test assertions. Passes AddressSanitizer and UBSan clean.</p>
+    <p>We then wrote the whole thing <em>again</em> in C. Zero dynamic allocation. Embedded-ready. 116 test assertions. Passes AddressSanitizer and UBSan clean.</p>
     <p>Then we ran <strong>~40 independent critic reviews</strong> across physics accuracy, code quality, safety logic, manual compliance, and numerical stability. Each critic tried to break it. The ones that succeeded got their findings fixed and re-reviewed.</p>
     <p style="margin-top:1rem"><span class="snark">So when you say "I'm not even sure what you're trying to show that it can do" — we're showing it can do <em>your job</em>, Nick. From a PDF. In an afternoon.</span></p>
     <p style="color:var(--dim);font-size:0.85rem;margin-top:1rem">But don't take our word for it. The code is <a href="https://github.com/HOLOS-git/corvus">open source</a>. Read it. Run it. Tell us what's wrong. We have a dedicated <a href="https://github.com/HOLOS-git/corvus/blob/main/c/test_corvus.c">oscillating-fault stress test</a> that proves our leaky timers work. Do you?</p>
@@ -228,7 +228,7 @@ pre .const{color:#f0883e}
   <div class="bubble">
     <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
     <p>See <span class="nick">Nick</span>, a battery is basically a voltage source with a resistor in front of it. That's it. <span class="snark">We know you know this. We're being thorough.</span></p>
-    <p>The Orca pack is <strong>22 modules</strong> in series, <strong>14 cells per module</strong> (308 cells total), with a nominal capacity of <strong>128 Ah</strong>. The open-circuit voltage follows a 24-point NMC 622 curve from literature:</p>
+    <p>The Orca pack is <strong>22 modules</strong> in series, <strong>14 series elements (SE) per module</strong> (308 SE total), with a nominal capacity of <strong>128 Ah</strong>. The open-circuit voltage follows a 24-point NMC 622 curve from literature:</p>
   </div>
 
   <pre><span class="comment"># 24-point NMC 622 OCV curve</span>
@@ -592,7 +592,7 @@ discharge_limit = max(<span class="number">0</span>, min(td, sd, vd))</pre>
 }</pre>
 
   <div class="c-stats">
-    <div class="c-stat"><span class="num">123</span><span class="label">Assertions, 29 Suites</span></div>
+    <div class="c-stat"><span class="num">116</span><span class="label">Assertions, 29 Suites</span></div>
     <div class="c-stat"><span class="num">0</span><span class="label">Warnings (-Werror)</span></div>
     <div class="c-stat"><span class="num">✓</span><span class="label">AddressSanitizer</span></div>
     <div class="c-stat"><span class="num">0</span><span class="label">malloc calls</span></div>
@@ -603,7 +603,7 @@ discharge_limit = max(<span class="number">0</span>, min(td, sd, vd))</pre>
       <svg class="crow-badge-c crow-icon" width="40" height="40"><use href="#crow"/></svg>
       <span class="badge-gear">⚙</span>
     </div>
-    <p>123 assertions across 29 test suites. Passes AddressSanitizer clean. Zero warnings with <code>-Wall -Wextra -Werror -pedantic</code>. Zero dynamic allocation. <span class="snark">Pure C99, like your firmware. Except ours compiles without warnings.</span></p>
+    <p>116 assertions across 29 test suites. Passes AddressSanitizer clean. Zero warnings with <code>-Wall -Wextra -Werror -pedantic</code>. Zero dynamic allocation. <span class="snark">Pure C99, like your firmware. Except ours compiles without warnings.</span></p>
     <p style="margin-top:1rem"><a href="https://github.com/HOLOS-git/corvus/tree/main/c" target="_blank" style="color:var(--amber)">View the C implementation on GitHub →</a></p>
   </div>
 </section>
