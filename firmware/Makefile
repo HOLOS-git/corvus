@@ -40,5 +40,14 @@ stm32:
 		-c $(SRC_CORE) $(HAL_STM32) $(SRC_RTOS) main.c 2>&1 || echo "Note: arm-none-eabi-gcc not installed (expected on desktop)"
 	@rm -f *.o
 
+# Demo build — compile + run + plot
+SRC_DEMO = demo/firmware_demo.c
+
+firmware_demo: $(SRC_CORE) $(HAL_MOCK) $(SRC_DEMO)
+	$(CC_DESKTOP) $(CFLAGS) -DDESKTOP_BUILD -o $@ $^ -lm
+
+demo: firmware_demo
+	./firmware_demo | python3 demo/plot_firmware.py
+
 clean:
-	rm -f test_firmware *.o
+	rm -f test_firmware firmware_demo *.o
