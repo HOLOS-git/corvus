@@ -3,6 +3,7 @@
  *
  * Each task runs in its own FreeRTOS thread with specified priority/period.
  * On DESKTOP_BUILD, we provide stub implementations (no RTOS).
+ * All tasks use hal_critical_enter/exit around shared pack data access.
  *
  * SIMULATION DISCLAIMER: Firmware architecture demo, not production code.
  */
@@ -37,6 +38,8 @@ static void task_monitor(void *arg)
     /* TickType_t last_wake = xTaskGetTickCount(); */
     for (;;) {
         bms_monitor_run(s_pack);
+        /* Critical section around writing aggregated pack data is handled
+         * inside bms_monitor_run via hal_critical_enter/exit */
         /* vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(BMS_MONITOR_PERIOD_MS)); */
     }
 }
@@ -45,9 +48,13 @@ static void task_protection(void *arg)
 {
     (void)arg;
     for (;;) {
+        hal_critical_enter();
         bms_protection_run(s_prot, s_pack, BMS_PROTECTION_PERIOD_MS);
+        hal_critical_exit();
         if (s_pack->fault_latched) {
+            hal_critical_enter();
             bms_state_enter_fault(s_pack, s_contactor);
+            hal_critical_exit();
         }
         /* vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(BMS_PROTECTION_PERIOD_MS)); */
     }
@@ -57,7 +64,9 @@ static void task_can_tx(void *arg)
 {
     (void)arg;
     for (;;) {
+        hal_critical_enter();
         bms_can_tx_periodic(s_pack);
+        hal_critical_exit();
         /* vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(BMS_CAN_TX_PERIOD_MS)); */
     }
 }
@@ -68,8 +77,10 @@ static void task_can_rx(void *arg)
     for (;;) {
         bms_ems_command_t cmd;
         if (bms_can_rx_process(&cmd)) {
+            hal_critical_enter();
             s_last_ems_cmd = cmd;
             s_pack->last_ems_msg_ms = cmd.timestamp_ms;
+            hal_critical_exit();
         }
         /* vTaskDelay(pdMS_TO_TICKS(1)); — event-driven, minimal delay */
     }
@@ -79,8 +90,10 @@ static void task_contactor(void *arg)
 {
     (void)arg;
     for (;;) {
+        hal_critical_enter();
         bms_contactor_run(s_contactor, s_pack, BMS_CONTACTOR_PERIOD_MS);
         s_pack->contactor_state = bms_contactor_get_state(s_contactor);
+        hal_critical_exit();
         /* vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(BMS_CONTACTOR_PERIOD_MS)); */
     }
 }
@@ -89,9 +102,11 @@ static void task_state(void *arg)
 {
     (void)arg;
     for (;;) {
+        hal_critical_enter();
         bms_state_run(s_pack, s_contactor, s_prot, &s_last_ems_cmd,
                        BMS_STATE_PERIOD_MS);
         s_last_ems_cmd.type = EMS_CMD_NONE; /* consume command */
+        hal_critical_exit();
         /* vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(BMS_STATE_PERIOD_MS)); */
     }
 }

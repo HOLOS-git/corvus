@@ -23,10 +23,10 @@
 #include "bms_config.h"
 #include <string.h>
 
-/* ── Internal: I2C address for module (all same, mux handles routing) ─ */
+/* ── Internal: select module mux and return I2C address ────────────── */
 static uint8_t module_i2c_addr(uint8_t module_id)
 {
-    (void)module_id;
+    hal_i2c_select_module(module_id);
     return BQ76952_I2C_ADDR;
 }
 

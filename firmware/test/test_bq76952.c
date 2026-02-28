@@ -128,6 +128,74 @@ static void test_cell_reg_macro(void)
     TEST_ASSERT_EQ(BQ76952_CELL_REG(13), 0x2EU);
 }
 
+/* ── Multi-module routing tests (Fix 3) ────────────────────────────── */
+
+static void test_multi_module_voltage_routing(void)
+{
+    mock_hal_reset();
+    uint16_t cells0[BMS_SE_PER_MODULE];
+    uint16_t cells5[BMS_SE_PER_MODULE];
+    uint8_t i;
+
+    /* Set module 0 to 3700mV, module 5 to 4000mV */
+    for (i = 0U; i < BMS_SE_PER_MODULE; i++) {
+        mock_set_cell_voltage(0, i, 3700U);
+        mock_set_cell_voltage(5, i, 4000U);
+    }
+
+    int32_t rc0 = bq76952_read_all_cells(0, cells0);
+    int32_t rc5 = bq76952_read_all_cells(5, cells5);
+
+    TEST_ASSERT_EQ(rc0, 0);
+    TEST_ASSERT_EQ(rc5, 0);
+    TEST_ASSERT_EQ(cells0[0], 3700U);
+    TEST_ASSERT_EQ(cells0[7], 3700U);
+    TEST_ASSERT_EQ(cells5[0], 4000U);
+    TEST_ASSERT_EQ(cells5[7], 4000U);
+}
+
+static void test_multi_module_ov_detection(void)
+{
+    mock_hal_reset();
+    uint16_t cells0[BMS_SE_PER_MODULE];
+    uint16_t cells3[BMS_SE_PER_MODULE];
+    uint8_t i;
+
+    /* Module 0: nominal 3700mV */
+    for (i = 0U; i < BMS_SE_PER_MODULE; i++) {
+        mock_set_cell_voltage(0, i, 3700U);
+    }
+    /* Module 3: OV at 4300mV */
+    for (i = 0U; i < BMS_SE_PER_MODULE; i++) {
+        mock_set_cell_voltage(3, i, 4300U);
+    }
+
+    bq76952_read_all_cells(0, cells0);
+    bq76952_read_all_cells(3, cells3);
+
+    /* Module 0 should be nominal */
+    TEST_ASSERT_EQ(cells0[0], 3700U);
+    /* Module 3 should be OV */
+    TEST_ASSERT_EQ(cells3[0], 4300U);
+    /* Cross-check: module 0 should NOT have module 3's values */
+    TEST_ASSERT(cells0[0] != cells3[0]);
+}
+
+static void test_multi_module_temperature_routing(void)
+{
+    mock_hal_reset();
+
+    /* Module 0: 25°C, Module 5: 60°C */
+    mock_set_temperature(0, 0, 250);
+    mock_set_temperature(5, 0, 600);
+
+    int16_t t0 = bq76952_read_temperature(0, 0);
+    int16_t t5 = bq76952_read_temperature(5, 0);
+
+    TEST_ASSERT(t0 >= 249 && t0 <= 251);
+    TEST_ASSERT(t5 >= 599 && t5 <= 601);
+}
+
 void test_bq76952_suite(void)
 {
     test_init_success();
@@ -139,4 +207,7 @@ void test_bq76952_suite(void)
     test_read_safety();
     test_checksum();
     test_cell_reg_macro();
+    test_multi_module_voltage_routing();
+    test_multi_module_ov_detection();
+    test_multi_module_temperature_routing();
 }

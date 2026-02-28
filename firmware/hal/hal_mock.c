@@ -60,6 +60,9 @@ static uint32_t mock_tick;
 /* I2C error injection */
 static bool mock_i2c_fail;
 
+/* Active module (set by hal_i2c_select_module) */
+static uint8_t mock_active_module;
+
 /* Device number response (for init verification) */
 static uint16_t mock_device_number;
 
@@ -94,6 +97,7 @@ void mock_hal_reset(void)
     mock_can_rx_tail = 0U;
     mock_can_rx_count = 0U;
     mock_tick = 0U;
+    mock_active_module = 0U;
     mock_i2c_fail = false;
     mock_device_number = 0x7695U; /* valid BQ76952 */
     mock_last_subcmd = 0U;
@@ -224,53 +228,57 @@ int32_t hal_i2c_write(uint8_t addr, const uint8_t *data, uint16_t len)
     return 0;
 }
 
+void hal_i2c_select_module(uint8_t module_id)
+{
+    if (module_id < BMS_NUM_MODULES) {
+        mock_active_module = module_id;
+    }
+}
+
 int32_t hal_i2c_read(uint8_t addr, uint8_t reg, uint8_t *buf, uint16_t len)
 {
+    uint8_t m = mock_active_module;
     (void)addr;
     if (mock_i2c_fail) { return -1; }
 
-    /* Determine which module by I2C address (all same in mock) */
-    /* Module selection is implicit — tests set per-module data */
-
-    /* Route reads based on register address */
+    /* Route reads based on register address, using active module */
 
     /* Cell voltage registers: 0x14–0x32 */
     if (reg >= BQ76952_REG_CELL1_VOLTAGE && reg <= 0x32U && len == 2U) {
         uint8_t cell_idx = (uint8_t)((reg - BQ76952_REG_CELL1_VOLTAGE) / 2U);
-        /* Use module 0 for direct reads (tests should use bq76952_read_all_cells) */
-        uint16_t mv = mock_cell_mv[0][cell_idx];
+        uint16_t mv = mock_cell_mv[m][cell_idx];
         buf[0] = (uint8_t)(mv & 0xFFU);
         buf[1] = (uint8_t)((mv >> 8U) & 0xFFU);
         return 0;
     }
 
     /* Safety registers */
-    if (reg == BQ76952_REG_SAFETY_ALERT_A && len == 1U) { buf[0] = mock_safety_a[0]; return 0; }
-    if (reg == BQ76952_REG_SAFETY_STATUS_A && len == 1U) { buf[0] = mock_safety_a[0]; return 0; }
-    if (reg == BQ76952_REG_SAFETY_ALERT_B && len == 1U) { buf[0] = mock_safety_b[0]; return 0; }
-    if (reg == BQ76952_REG_SAFETY_STATUS_B && len == 1U) { buf[0] = mock_safety_b[0]; return 0; }
-    if (reg == BQ76952_REG_SAFETY_ALERT_C && len == 1U) { buf[0] = mock_safety_c[0]; return 0; }
+    if (reg == BQ76952_REG_SAFETY_ALERT_A && len == 1U) { buf[0] = mock_safety_a[m]; return 0; }
+    if (reg == BQ76952_REG_SAFETY_STATUS_A && len == 1U) { buf[0] = mock_safety_a[m]; return 0; }
+    if (reg == BQ76952_REG_SAFETY_ALERT_B && len == 1U) { buf[0] = mock_safety_b[m]; return 0; }
+    if (reg == BQ76952_REG_SAFETY_STATUS_B && len == 1U) { buf[0] = mock_safety_b[m]; return 0; }
+    if (reg == BQ76952_REG_SAFETY_ALERT_C && len == 1U) { buf[0] = mock_safety_c[m]; return 0; }
 
     /* Temperature registers */
     if (reg == BQ76952_REG_TS1_TEMP && len == 2U) {
-        uint16_t v = mock_temp_raw[0][0];
+        uint16_t v = mock_temp_raw[m][0];
         buf[0] = (uint8_t)(v & 0xFFU); buf[1] = (uint8_t)((v >> 8U) & 0xFFU);
         return 0;
     }
     if (reg == BQ76952_REG_TS2_TEMP && len == 2U) {
-        uint16_t v = mock_temp_raw[0][1];
+        uint16_t v = mock_temp_raw[m][1];
         buf[0] = (uint8_t)(v & 0xFFU); buf[1] = (uint8_t)((v >> 8U) & 0xFFU);
         return 0;
     }
     if (reg == BQ76952_REG_TS3_TEMP && len == 2U) {
-        uint16_t v = mock_temp_raw[0][2];
+        uint16_t v = mock_temp_raw[m][2];
         buf[0] = (uint8_t)(v & 0xFFU); buf[1] = (uint8_t)((v >> 8U) & 0xFFU);
         return 0;
     }
 
     /* CC2 current */
     if (reg == BQ76952_REG_CC2_CURRENT && len == 2U) {
-        int16_t c = mock_current_ma[0];
+        int16_t c = mock_current_ma[m];
         buf[0] = (uint8_t)((uint16_t)c & 0xFFU);
         buf[1] = (uint8_t)(((uint16_t)c >> 8U) & 0xFFU);
         return 0;
@@ -282,7 +290,7 @@ int32_t hal_i2c_read(uint8_t addr, uint8_t reg, uint8_t *buf, uint16_t len)
         uint32_t sum = 0U;
         uint8_t ci;
         for (ci = 0U; ci < BMS_SE_PER_MODULE; ci++) {
-            sum += mock_cell_mv[0][ci];
+            sum += mock_cell_mv[m][ci];
         }
         uint16_t val10 = (uint16_t)(sum / 10U);
         buf[0] = (uint8_t)(val10 & 0xFFU);

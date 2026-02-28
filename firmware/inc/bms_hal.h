@@ -14,6 +14,16 @@
 #include <stdbool.h>
 #include "bms_types.h"
 
+/* ── I2C mux / module selection ─────────────────────────────────────── */
+
+/**
+ * Select the I2C mux channel for the given module.
+ * On real HW, this controls the I2C mux to route to the correct module.
+ * Must be called before hal_i2c_read/write for a specific module.
+ * @param module_id  module index 0..(BMS_NUM_MODULES-1)
+ */
+void hal_i2c_select_module(uint8_t module_id);
+
 /* ── I2C ───────────────────────────────────────────────────────────── */
 
 /**

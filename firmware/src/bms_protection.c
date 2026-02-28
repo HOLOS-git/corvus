@@ -240,9 +240,12 @@ void bms_protection_run(bms_protection_state_t *prot,
         int32_t temp_charge_limit_ma, temp_discharge_limit_ma;
         bms_current_limit_compute(pack, &temp_charge_limit_ma, &temp_discharge_limit_ma);
 
-        /* OC charge fault: only at T<0°C during charge (per Python/Table 13) */
+        /* OC charge fault: only at T<0°C during charge (per Table 13)
+         * Threshold = 1.05 × temp_charge_limit + 5A (matches OC warning formula) */
         if (pack->pack_current_ma > 0 && pack->min_temp_deci_c < 0) {
-            if (pack->pack_current_ma > temp_charge_limit_ma) {
+            int32_t oc_fault_thresh = (int32_t)((int64_t)temp_charge_limit_ma *
+                                      105 / 100) + 5000;
+            if (pack->pack_current_ma > oc_fault_thresh) {
                 leak_increment(&prot->oc_charge_timer_ms, dt_ms);
                 if (prot->oc_charge_timer_ms >= BMS_SE_FAULT_DELAY_MS) {
                     pack->faults.oc_charge = 1U;

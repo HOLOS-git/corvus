@@ -35,6 +35,13 @@ void hal_init(void)
      * MX_GPIO_Init(); */
 }
 
+void hal_i2c_select_module(uint8_t module_id)
+{
+    (void)module_id;
+    /* Select I2C mux channel for the given module:
+     * e.g. TCA9548A mux write to select channel module_id */
+}
+
 int32_t hal_i2c_write(uint8_t addr, const uint8_t *data, uint16_t len)
 {
     (void)addr; (void)data; (void)len;
