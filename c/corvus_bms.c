@@ -567,12 +567,38 @@ static void update_safe_state_timer(corvus_controller_t *ctrl, double dt)
 void corvus_controller_init(corvus_controller_t *ctrl, int pack_id,
                             double soc, double temperature)
 {
+    /* Belt-and-suspenders: zero everything first, then set explicitly.
+     * Every field is initialized below — memset is a safety net only. */
     memset(ctrl, 0, sizeof(*ctrl));
+
     corvus_pack_init(&ctrl->pack, pack_id, soc, temperature);
     ctrl->mode = BMS_MODE_READY;
     ctrl->contactors_closed = false;
+
     ctrl->charge_current_limit = BMS_NOMINAL_CAPACITY_AH;
     ctrl->discharge_current_limit = BMS_NOMINAL_CAPACITY_AH;
+
+    ctrl->has_warning = false;
+    ctrl->has_fault = false;
+    ctrl->fault_latched = false;
+    ctrl->hw_fault_latched = false;
+    ctrl->warning_message[0] = '\0';
+    ctrl->fault_message[0] = '\0';
+
+    ctrl->ov_fault_timer = 0.0;
+    ctrl->uv_fault_timer = 0.0;
+    ctrl->ot_fault_timer = 0.0;
+    ctrl->ov_warn_timer = 0.0;
+    ctrl->uv_warn_timer = 0.0;
+    ctrl->ot_warn_timer = 0.0;
+    ctrl->hw_ov_timer = 0.0;
+    ctrl->hw_uv_timer = 0.0;
+    ctrl->hw_ot_timer = 0.0;
+    ctrl->oc_fault_timer = 0.0;
+    ctrl->oc_warn_timer = 0.0;
+    ctrl->warning_active_time = 0.0;
+    ctrl->precharge_timer = 0.0;
+    ctrl->time_in_safe_state = 0.0;
 }
 
 bool corvus_controller_request_connect(corvus_controller_t *ctrl,
