@@ -119,7 +119,7 @@ pre.terminal.angry::before{background:rgba(248,81,73,.15);color:var(--red)}
     <circle cx="61.5" cy="28.5" r="2.2" fill="#0d1117"/>
     <circle cx="62.5" cy="27.5" r=".8" fill="#fff"/>
     <!-- Angry eyebrow (steeper angle = irritated) -->
-    <line x1="55" y1="25" x2="65" y2="21" stroke="#f85149" stroke-width="2" stroke-linecap="round"/>
+    <line x1="55" y1="21" x2="65" y2="25" stroke="#f85149" stroke-width="2" stroke-linecap="round"/>
     <path d="M30,50 Q20,45 22,60 Q25,72 40,75 Q50,72 55,65 Q45,60 38,55Z" fill="#16213e"/>
     <path d="M22,62 Q12,70 15,78 Q20,75 25,70Z" fill="#1a1a2e"/>
     <path d="M24,65 Q10,75 14,82 Q20,78 27,73Z" fill="#16213e"/>
@@ -155,7 +155,7 @@ pre.terminal.angry::before{background:rgba(248,81,73,.15);color:var(--red)}
   </div>
   <div class="bubble angry">
     <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
-    <p>Last time, we built a <a href="index.html">complete BMS simulation</a> — Python model, C99 reimplementation, 40 critic reviews, Kirchhoff current solver, thermal model with entropic heating, leaky fault timers. <span class="emphasis">9/10 from an independent marine BMS expert.</span></p>
+    <p>Last time, we built a <a href="index.html">complete BMS simulation</a> — Python model, C99 reimplementation, 40 critic reviews, Kirchhoff current solver, thermal model with entropic heating, leaky fault timers. <span class="emphasis">9/10 from a dedicated AI critic playing marine BMS engineer.</span></p>
     <p>Your response, <span class="nick">Nick</span>? <em>"No device code, no RTOS code, no MC code."</em></p>
     <p><span class="snark">So here we are. Again. Because apparently a working simulation with 285 test assertions, AddressSanitizer-clean C, and zero malloc wasn't "real" enough for you.</span></p>
   </div>
@@ -262,7 +262,7 @@ pre.terminal.angry::before{background:rgba(248,81,73,.15);color:var(--red)}
 
   <div class="bubble">
     <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
-    <p>And here's the part the expert review flagged: <strong>staggered module reads</strong>. Reading all 22 modules in one cycle would take ~66ms of I2C time. Instead, we read <strong>one module per 10ms cycle</strong>. Full scan completes in 220ms. Each cycle stays under 3ms of I2C time.</p>
+    <p>And here's the part our AI review panel flagged: <strong>staggered module reads</strong>. Reading all 22 modules in one cycle would take ~66ms of I2C time. Instead, we read <strong>one module per 10ms cycle</strong>. Full scan completes in 220ms. Each cycle stays under 3ms of I2C time.</p>
     <p><span class="snark">The kind of optimization that separates firmware from homework.</span></p>
   </div>
 
@@ -614,7 +614,7 @@ pre.terminal.angry::before{background:rgba(248,81,73,.15);color:var(--red)}
   </div>
   <div class="bubble">
     <svg class="crow-badge crow-icon" width="32" height="32"><use href="#crow"/></svg>
-    <p>Six tasks. Three priority levels. <strong>Critical sections around every shared data access</strong> — because <code>bms_pack_data_t</code> is shared across all tasks. The expert review flagged the race condition. We fixed it with <code>hal_critical_enter()</code> / <code>hal_critical_exit()</code>.</p>
+    <p>Six tasks. Three priority levels. <strong>Critical sections around every shared data access</strong> — because <code>bms_pack_data_t</code> is shared across all tasks. Our 10-agent review panel flagged the race condition. We fixed it with <code>hal_critical_enter()</code> / <code>hal_critical_exit()</code>.</p>
     <p><span class="snark">No mutex? No RTOS experience? We're using critical sections on a single-core Cortex-M4, <span class="nick">Nick</span>. That's the correct primitive.</span></p>
   </div>
 
