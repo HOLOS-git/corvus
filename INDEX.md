@@ -30,7 +30,7 @@ Corvus is a demonstration project: a working simulation of Corvus Energy's Orca 
 | Path | Lines | Description |
 |------|-------|-------------|
 | `c/corvus_bms.h` | 322 | Public API — structs, enums, function prototypes |
-| `c/corvus_bms.c` | 1,046 | Core BMS implementation — all physics and controls |
+| `c/corvus_bms.c` | 1,072 | Core BMS implementation — all physics and controls |
 | `c/corvus_demo.c` | 436 | 8-phase scenario runner with CSV output |
 | `c/test_corvus.c` | 958 | 29 test suites, 116 assertions |
 | `c/Makefile` | 23 | Build targets: `make`, `make test`, `make debug` (ASan/UBSan) |
@@ -91,7 +91,7 @@ Corvus is a demonstration project: a working simulation of Corvus Energy's Orca 
 | v4 polish | KCL fix, warnings, temp floor, limitations | 6 critics (+legal, fresh eyes) |
 | v4 final | C port, electrochemistry fixes, site | 3 C-specific critics + Nick persona |
 
-**Total:** ~40 sub-agent reviews, ~4,155 lines of code (Python + C), 116 test assertions, 17 documented limitations.
+**Total:** ~40 sub-agent reviews, ~4,180 lines of code (Python + C sim), 116 C sim test assertions + 183 firmware test assertions, 17 documented limitations.
 
 ---
 

@@ -14,6 +14,10 @@ src/
   bms_contactor.c  — Contactor state machine (pre-charge, weld detection)
   bms_can.c        — CAN 2.0B message framing (Orca Modbus register map)
   bms_state.c      — 7-mode pack state machine (OFF→NOT_READY→READY→…)
+  bms_soc.c        — Coulomb counting + OCV-based SoC estimation
+  bms_balance.c    — Passive cell balancing via BQ76952
+  bms_nvm.c        — Non-volatile fault logging
+  bms_current_limit.c — Temperature/SoC-based current derating
 
 inc/               — Headers and type definitions
 hal/
@@ -28,6 +32,10 @@ test/
   test_contactor.c — Contactor state machine + weld detection tests
   test_can.c       — CAN frame encode/decode tests
   test_state.c     — Pack state machine transition tests
+  test_current_limit.c — Current derating tests
+  test_soc.c       — SoC estimation tests
+  test_balance.c   — Cell balancing tests
+  test_nvm.c       — NVM fault logging tests
 ```
 
 ## Pack Topology

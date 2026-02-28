@@ -132,6 +132,10 @@ src/
   bms_contactor.c  — Contactor state machine (pre-charge, weld detection)
   bms_can.c        — CAN 2.0B message framing (Orca Modbus register map)
   bms_state.c      — 7-mode pack state machine (OFF→NOT_READY→READY→…)
+  bms_soc.c        — Coulomb counting + OCV-based SoC estimation
+  bms_balance.c    — Passive cell balancing via BQ76952
+  bms_nvm.c        — Non-volatile fault logging
+  bms_current_limit.c — Temperature/SoC-based current derating
 
 inc/               — Headers and type definitions
 hal/
@@ -146,6 +150,10 @@ test/
   test_contactor.c — Contactor state machine + weld detection tests
   test_can.c       — CAN frame encode/decode tests
   test_state.c     — Pack state machine transition tests
+  test_current_limit.c — Current derating tests
+  test_soc.c       — SoC estimation tests
+  test_balance.c   — Cell balancing tests
+  test_nvm.c       — NVM fault logging tests
 ```
 
 ### Module Descriptions
@@ -169,6 +177,10 @@ All tests run on desktop via `make test` using the mock HAL:
 - **Contactor tests** — verify pre-charge sequencing, weld detection (current persists after open), timeout handling
 - **CAN tests** — verify frame encoding (byte order, scaling), decoding round-trip, EMS watchdog timeout
 - **State machine tests** — verify all legal transitions, verify illegal transitions are rejected, verify fault latching requires explicit reset
+- **Current limit tests** — verify temperature and SoC-based derating curves
+- **SoC tests** — verify coulomb counting and OCV-based SoC reset
+- **Balance tests** — verify passive cell balancing logic
+- **NVM tests** — verify non-volatile fault logging
 
 Build also supports `make debug` (ASan/UBSan) and `make stm32` (ARM cross-compile check).
 

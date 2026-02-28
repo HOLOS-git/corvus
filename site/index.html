@@ -184,8 +184,8 @@ pre .const{color:#f0883e}
     <p><span class="emphasis">This is a working simulation of your company's product.</span> Specifically, the <strong>Corvus Energy Orca ESS Pack</strong> — the battery system you work on every day. We implemented the Pack↔EMS interface exactly as described in your own integrator manual.</p>
     <p>Here's what we built:</p>
     <ul style="margin:1rem 0 1rem 1.5rem;color:var(--text)">
-      <li><strong>The 7-mode BMS state machine</strong> — STANDBY → READY → CONNECTING → CONNECTED → FAULT → SHUTDOWN, with every transition your manual specifies</li>
-      <li><strong>Your alarm thresholds</strong> — over-voltage at 4.210V/cell, under-voltage at 3.000V, over-temp at 55°C, with the exact delay timers and hysteresis deadbands from your documentation</li>
+      <li><strong>The 7-mode BMS state machine</strong> — OFF → READY → CONNECTING → CONNECTED → FAULT (plus POWER_SAVE and NOT_READY), with every transition your manual specifies</li>
+      <li><strong>Your alarm thresholds</strong> — over-voltage at 4.210V/cell, under-voltage at 3.000V, over-temp at 60°C, with the exact delay timers and hysteresis deadbands from your documentation</li>
       <li><strong>Your current derating curves</strong> — the SEV charge/discharge limits from Figures 28, 29, and 30, the ones that vary with temperature and SoC</li>
       <li><strong>A Kirchhoff current distribution solver</strong> — for parallel packs sharing a DC bus, with iterative per-pack clamping. The thing your EMS has to talk to.</li>
       <li><strong>A thermal model</strong> — with 2D resistance R(SoC,T) from your Table on page 32 (3.3 mΩ/module nominal), reversible entropic heating (I·T·dOCV/dT), and realistic engine-room ambient at 40°C</li>
@@ -594,7 +594,7 @@ discharge_limit = max(<span class="number">0</span>, min(td, sd, vd))</pre>
 
   <div class="c-stats">
     <div class="c-stat"><span class="num">116</span><span class="label">C Sim Assertions, 29 Suites</span></div>
-    <div class="c-stat"><span class="num">169</span><span class="label">Firmware Assertions, 9 Suites</span></div>
+    <div class="c-stat"><span class="num">183</span><span class="label">Firmware Assertions, 9 Suites</span></div>
     <div class="c-stat"><span class="num">0</span><span class="label">Warnings (-Werror)</span></div>
     <div class="c-stat"><span class="num">✓</span><span class="label">AddressSanitizer</span></div>
     <div class="c-stat"><span class="num">0</span><span class="label">malloc calls</span></div>
@@ -605,7 +605,7 @@ discharge_limit = max(<span class="number">0</span>, min(td, sd, vd))</pre>
       <svg class="crow-badge-c crow-icon" width="40" height="40"><use href="#crow"/></svg>
       <span class="badge-gear">⚙</span>
     </div>
-    <p>116 assertions across 29 suites (C simulation) plus 169 assertions across 9 suites (firmware). Passes AddressSanitizer clean. Zero warnings with <code>-Wall -Wextra -Werror -pedantic</code>. Zero dynamic allocation. <span class="snark">Pure C99, like your firmware. Except ours compiles without warnings.</span></p>
+    <p>116 assertions across 29 suites (C simulation) plus 183 assertions across 9 suites (firmware). Passes AddressSanitizer clean. Zero warnings with <code>-Wall -Wextra -Werror -pedantic</code>. Zero dynamic allocation. <span class="snark">Pure C99, like your firmware. Except ours compiles without warnings.</span></p>
     <p style="margin-top:1rem"><a href="https://github.com/HOLOS-git/corvus/tree/main/c" target="_blank" style="color:var(--amber)">View the C implementation on GitHub →</a></p>
   </div>
 </section>
@@ -621,7 +621,8 @@ discharge_limit = max(<span class="number">0</span>, min(td, sd, vd))</pre>
   </div>
   <p class="tagline">Built by an AI in 90 minutes. ~40 critics. 5 review cycles. Zero coffee breaks.</p>
   <p style="margin:.5rem 0">You're welcome, Nick. 🐦‍⬛</p>
-  <p style="margin:1.5rem 0"><a href="https://github.com/HOLOS-git/corvus" target="_blank">View on GitHub →</a></p>
+  <p style="margin:1.5rem 0 .5rem"><a href="firmware.html" style="color:var(--red);font-weight:600;font-size:1.1rem">🐦‍⬛ "No device code"? Here's the firmware version →</a></p>
+  <p style="margin:.5rem 0"><a href="https://github.com/HOLOS-git/corvus" target="_blank">View on GitHub →</a></p>
   <p class="disclaimer">
     <strong>Disclaimer:</strong> This simulation is an independent educational implementation for interoperability purposes.
     It is not affiliated with, endorsed by, or derived from Corvus Energy's proprietary software.
