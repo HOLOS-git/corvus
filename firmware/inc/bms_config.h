@@ -65,7 +65,7 @@
 
 /* ── Voltage match for connection (§7.2) ───────────────────────────── */
 /* 1.2V per module × 22 modules = 26.4V → 26400 mV */
-#define BMS_VOLTAGE_MATCH_MV       26400U
+#define BMS_VOLTAGE_MATCH_MV       (1200U * BMS_NUM_MODULES)
 
 /* ── CAN communication ─────────────────────────────────────────────── */
 #define BMS_CAN_HEARTBEAT_MS       1000U  /* 1s heartbeat interval         */
@@ -86,5 +86,8 @@
 /* Max discharge: 5C × 128Ah = 640A = 640000 mA                          */
 #define BMS_MAX_CHARGE_MA         384000
 #define BMS_MAX_DISCHARGE_MA      640000
+
+/* ── Coulombic efficiency (parts per thousand) ─────────────────────── */
+#define BMS_COULOMBIC_EFFICIENCY_PPT  998U  /* 0.998 — charge only      */
 
 #endif /* BMS_CONFIG_H */

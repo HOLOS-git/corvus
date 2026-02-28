@@ -1,7 +1,7 @@
 /**
  * bms_soc.c — State of Charge estimation (coulomb counting + OCV reset)
  *
- * Coulomb counting: soc -= (current_ma * dt_ms) / (capacity_mah * 3600)
+ * Coulomb counting: soc += (current_ma * dt_ms) / (capacity_mah * 3600)
  * All arithmetic in int64_t to avoid overflow.
  *
  * OCV reset: when current ~0 for >30s and pack in READY mode,
@@ -87,6 +87,10 @@ void bms_soc_update(bms_pack_data_t *pack, uint32_t dt_ms)
      * delta = (current_ma * dt_ms) / (capacity_mah * 360)
      */
     delta = ((int64_t)pack->pack_current_ma * (int64_t)dt_ms);
+    /* Coulombic efficiency: only 99.8% of charge current counts */
+    if (pack->pack_current_ma > 0) {
+        delta = delta * BMS_COULOMBIC_EFFICIENCY_PPT / 1000;
+    }
     delta = delta / ((int64_t)BMS_NOMINAL_CAPACITY_MAH * 360);
 
     {

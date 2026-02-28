@@ -1,0 +1,26 @@
+plugins = []
+headers = []
+redirects = []
+
+[functions]
+
+[functions."*"]
+
+[build]
+publish = "/home/node/workspace/openclaw/Hawthorn/projects/corvus/site"
+publishOrigin = "default"
+base = "/home/node/workspace/openclaw/Hawthorn/projects/corvus/site"
+
+[build.environment]
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]

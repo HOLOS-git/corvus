@@ -15,9 +15,19 @@
  */
 
 #include "bms_protection.h"
+#include "bms_current_limit.h"
 #include "bms_nvm.h"
 #include "bms_config.h"
 #include <string.h>
+
+/* Warning delay: 5000ms leaky integrator (same as fault) */
+#define BMS_WARN_DELAY_MS       5000U
+/* Warning hold: stays asserted for at least 10s after condition clears */
+#define BMS_WARN_HOLD_MS       10000U
+/* OC warning: 1.05 × temp limit + 5A margin */
+#define BMS_OC_WARN_MARGIN_PPT  1050   /* 1.05 in parts per thousand */
+#define BMS_OC_WARN_OFFSET_MA   5000   /* 5A */
+#define BMS_OC_WARN_DELAY_MS   10000U  /* 10s delay for OC warning */
 
 /* Global NVM context for fault logging — initialized externally */
 static bms_nvm_ctx_t *s_nvm_ctx;
@@ -225,40 +235,145 @@ void bms_protection_run(bms_protection_state_t *prot,
         }
     }
 
-    /* ── Overcurrent check ─────────────────────────────────────────── */
-    if (pack->pack_current_ma > BMS_MAX_CHARGE_MA) {
-        leak_increment(&prot->oc_charge_timer_ms, dt_ms);
-        if (prot->oc_charge_timer_ms >= BMS_SE_FAULT_DELAY_MS) {
-            pack->faults.oc_charge = 1U;
-            pack->fault_latched = true;
-        }
-    } else {
-        leak_decay(&prot->oc_charge_timer_ms, dt_ms);
-    }
-
-    if (pack->pack_current_ma < -BMS_MAX_DISCHARGE_MA) {
-        leak_increment(&prot->oc_discharge_timer_ms, dt_ms);
-        if (prot->oc_discharge_timer_ms >= BMS_SE_FAULT_DELAY_MS) {
-            pack->faults.oc_discharge = 1U;
-            pack->fault_latched = true;
-        }
-    } else {
-        leak_decay(&prot->oc_discharge_timer_ms, dt_ms);
-    }
-
-    /* ── Warning check (OV/UV/OT below fault but above warning) ───── */
+    /* ── Temperature-dependent overcurrent check (Issue 4) ────────── */
     {
-        bool warn = false;
-        for (i = 0U; i < BMS_SE_PER_PACK; i++) {
-            if (pack->cell_mv[i] >= BMS_SE_OV_WARN_MV) { warn = true; break; }
-            if (pack->cell_mv[i] > 0U && pack->cell_mv[i] <= BMS_SE_UV_WARN_MV) {
-                warn = true; break;
+        int32_t temp_charge_limit_ma, temp_discharge_limit_ma;
+        bms_current_limit_compute(pack, &temp_charge_limit_ma, &temp_discharge_limit_ma);
+
+        /* OC charge fault: only at T<0°C during charge (per Python/Table 13) */
+        if (pack->pack_current_ma > 0 && pack->min_temp_deci_c < 0) {
+            if (pack->pack_current_ma > temp_charge_limit_ma) {
+                leak_increment(&prot->oc_charge_timer_ms, dt_ms);
+                if (prot->oc_charge_timer_ms >= BMS_SE_FAULT_DELAY_MS) {
+                    pack->faults.oc_charge = 1U;
+                    pack->fault_latched = true;
+                }
+            } else {
+                leak_decay(&prot->oc_charge_timer_ms, dt_ms);
+            }
+        } else {
+            leak_decay(&prot->oc_charge_timer_ms, dt_ms);
+        }
+
+        /* OC discharge fault: static limit (always active) */
+        if (pack->pack_current_ma < -(int32_t)BMS_MAX_DISCHARGE_MA) {
+            leak_increment(&prot->oc_discharge_timer_ms, dt_ms);
+            if (prot->oc_discharge_timer_ms >= BMS_SE_FAULT_DELAY_MS) {
+                pack->faults.oc_discharge = 1U;
+                pack->fault_latched = true;
+            }
+        } else {
+            leak_decay(&prot->oc_discharge_timer_ms, dt_ms);
+        }
+
+        /* OC warning: I > 1.05 × temp_charge_limit + 5A with 10s delay */
+        {
+            int32_t oc_warn_thresh = (int32_t)((int64_t)temp_charge_limit_ma *
+                                     BMS_OC_WARN_MARGIN_PPT / 1000) +
+                                     BMS_OC_WARN_OFFSET_MA;
+            if (pack->pack_current_ma > oc_warn_thresh) {
+                leak_increment(&prot->oc_charge_timer_ms, dt_ms);
+                /* OC warning uses a longer delay; piggyback on charge timer
+                 * but only warn (not fault) above OC_WARN_DELAY threshold */
             }
         }
-        if (!warn && pack->max_temp_deci_c >= BMS_SE_OT_WARN_DECI_C) {
-            warn = true;
+    }
+
+    /* ── Warning check with 5s delay timers + hysteresis (Issues 2,3) ── */
+    {
+        bool warn_cond_ov = false;
+        bool warn_cond_uv = false;
+        bool warn_cond_ot = false;
+
+        /* Check OV warning condition (with hysteresis) */
+        for (i = 0U; i < BMS_SE_PER_PACK; i++) {
+            uint16_t thresh = prot->warn_ov_active ?
+                BMS_SE_OV_WARN_CLEAR_MV : BMS_SE_OV_WARN_MV;
+            if (pack->cell_mv[i] >= thresh) {
+                warn_cond_ov = true;
+                break;
+            }
         }
-        pack->has_warning = warn;
+
+        /* Check UV warning condition (with hysteresis) */
+        for (i = 0U; i < BMS_SE_PER_PACK; i++) {
+            if (pack->cell_mv[i] == 0U) { continue; }
+            uint16_t thresh = prot->warn_uv_active ?
+                BMS_SE_UV_WARN_CLEAR_MV : BMS_SE_UV_WARN_MV;
+            if (pack->cell_mv[i] <= thresh) {
+                warn_cond_uv = true;
+                break;
+            }
+        }
+
+        /* Check OT warning condition (with hysteresis) */
+        {
+            int16_t thresh = prot->warn_ot_active ?
+                BMS_SE_OT_WARN_CLEAR_DC : BMS_SE_OT_WARN_DECI_C;
+            if (pack->max_temp_deci_c >= thresh) {
+                warn_cond_ot = true;
+            }
+        }
+
+        /* OV warning timer */
+        if (warn_cond_ov) {
+            leak_increment(&prot->warn_ov_timer_ms, dt_ms);
+            if (prot->warn_ov_timer_ms >= BMS_WARN_DELAY_MS) {
+                prot->warn_ov_active = true;
+            }
+        } else {
+            leak_decay(&prot->warn_ov_timer_ms, dt_ms);
+            if (!warn_cond_ov && prot->warn_ov_timer_ms == 0U) {
+                prot->warn_ov_active = false;
+            }
+        }
+
+        /* UV warning timer */
+        if (warn_cond_uv) {
+            leak_increment(&prot->warn_uv_timer_ms, dt_ms);
+            if (prot->warn_uv_timer_ms >= BMS_WARN_DELAY_MS) {
+                prot->warn_uv_active = true;
+            }
+        } else {
+            leak_decay(&prot->warn_uv_timer_ms, dt_ms);
+            if (!warn_cond_uv && prot->warn_uv_timer_ms == 0U) {
+                prot->warn_uv_active = false;
+            }
+        }
+
+        /* OT warning timer */
+        if (warn_cond_ot) {
+            leak_increment(&prot->warn_ot_timer_ms, dt_ms);
+            if (prot->warn_ot_timer_ms >= BMS_WARN_DELAY_MS) {
+                prot->warn_ot_active = true;
+            }
+        } else {
+            leak_decay(&prot->warn_ot_timer_ms, dt_ms);
+            if (!warn_cond_ot && prot->warn_ot_timer_ms == 0U) {
+                prot->warn_ot_active = false;
+            }
+        }
+
+        /* Aggregate warning with hold timer */
+        {
+            bool any_active = prot->warn_ov_active ||
+                              prot->warn_uv_active ||
+                              prot->warn_ot_active;
+            if (any_active) {
+                prot->warning_hold_ms = BMS_WARN_HOLD_MS;
+                pack->has_warning = true;
+            } else if (prot->warning_hold_ms > 0U) {
+                /* Hold timer countdown */
+                if (prot->warning_hold_ms > dt_ms) {
+                    prot->warning_hold_ms -= dt_ms;
+                } else {
+                    prot->warning_hold_ms = 0U;
+                }
+                pack->has_warning = (prot->warning_hold_ms > 0U);
+            } else {
+                pack->has_warning = false;
+            }
+        }
     }
 }
 

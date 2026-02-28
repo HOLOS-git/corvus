@@ -36,8 +36,18 @@ typedef struct {
     /* Safe-state accumulator for fault reset (ms) */
     uint32_t safe_state_ms;
 
-    /* Warning hold timer (ms) */
+    /* Warning leaky integrator timers (ms) — 5s delay like faults */
+    uint32_t warn_ov_timer_ms;
+    uint32_t warn_uv_timer_ms;
+    uint32_t warn_ot_timer_ms;
+
+    /* Warning hold timer (ms) — warning stays asserted for at least 10s */
     uint32_t warning_hold_ms;
+
+    /* Warning latched state (for hysteresis) */
+    bool warn_ov_active;
+    bool warn_uv_active;
+    bool warn_ot_active;
 } bms_protection_state_t;
 
 /**

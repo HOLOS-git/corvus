@@ -157,7 +157,7 @@ test/
 | `bms_protection` | Per-cell OV/UV fault detection using leaky integrator timers. Timers increment under fault condition and decay at half-rate when clear, preventing transient nuisance trips. Individual timers for all 308 cells. |
 | `bms_contactor` | State machine for contactor control: OPEN → PRE_CHARGE → CLOSING → CLOSED → OPENING → WELDED. Pre-charge sequencing with timeout. Weld detection by monitoring current after open command. |
 | `bms_can` | CAN 2.0B message encoding/decoding. Packs status frames with millivolt/milliamp scaling. Includes EMS watchdog — 5s timeout forces safe state if no EMS heartbeat received. |
-| `bms_state` | 7-mode pack state machine matching Orca ESS documented modes: OFF, NOT_READY, READY, STANDBY, CONNECTED, FAULT, SHUTDOWN. Transition guards enforce safety preconditions. |
+| `bms_state` | 7-mode pack state machine matching Orca ESS documented modes: OFF, POWER_SAVE, FAULT, READY, CONNECTING, CONNECTED, NOT_READY. Transition guards enforce safety preconditions. |
 | `hal_mock` | Desktop test HAL. All `hal_*` functions route to injectable state arrays. Tests set cell voltages, inject faults, verify GPIO outputs, capture CAN frames — all without hardware. |
 
 ### Test Coverage
@@ -199,8 +199,8 @@ Build also supports `make debug` (ASan/UBSan) and `make stm32` (ARM cross-compil
 
 ### Things a Real Product Would Have
 
-- **Coulomb counting + SoC estimation** — real SoC algorithms use extended Kalman filters or adaptive observers, not simple coulomb counting. We have the cell data infrastructure but not the estimation algorithm.
-- **Cell balancing** — the BQ76952 supports passive balancing; we read cells but don't implement balance control logic.
+- ~~Coulomb counting + SoC estimation~~ — **Implemented** in `bms_soc.c` (coulomb counting + OCV-based reset).
+- ~~Cell balancing~~ — **Implemented** in `bms_balance.c` (passive cell balancing).
 - **Thermal management** — liquid cooling loop control (pump/valve sequencing) is a significant subsystem we don't model.
 - **Modbus TCP protocol stack** — the Orca manual specifies Modbus TCP as the primary EMS interface. We implemented CAN framing but not the full Modbus register map.
 - **Multi-pack coordination** — real Orca arrays have multiple packs sharing a DC bus. We model a single pack.
@@ -226,8 +226,8 @@ Build also supports `make debug` (ASan/UBSan) and `make stm32` (ARM cross-compil
 
 ## Next Steps (If We Continue)
 
-1. **Coulomb counting + basic SoC** — implement simple coulomb counting with the per-cell voltage data we already collect; add OCV-based SoC correction at rest
-2. **Passive cell balancing** — the BQ76952 supports it natively; add balance control logic using the existing driver
+1. ~~Coulomb counting + basic SoC~~ — **Done** (`bms_soc.c`: coulomb counting with coulombic efficiency + OCV reset at rest)
+2. ~~Passive cell balancing~~ — **Done** (`bms_balance.c`: passive balancing using BQ76952)
 3. **Modbus TCP register map** — implement the EMS-facing Modbus interface to match the Orca integrator manual's documented commands (CONNECT, DISCONNECT, CONNECT_ALL_TO_CHARGE, etc.)
 4. **Multi-pack array simulation** — extend the mock HAL to simulate 4+ packs on a shared DC bus with the voltage-match connect logic
 5. **QEMU STM32 emulation** — run the actual ARM binary in QEMU with mock peripherals for true hardware-in-the-loop testing without physical boards

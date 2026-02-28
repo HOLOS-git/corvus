@@ -55,6 +55,10 @@ static void setup_nominal(void)
     }
     s_pack.max_temp_deci_c = 250;
     s_pack.min_temp_deci_c = 250;
+    s_pack.max_cell_mv = 3675U;
+    s_pack.min_cell_mv = 3675U;
+    s_pack.avg_cell_mv = 3675U;
+    s_pack.soc_hundredths = 5000U;
     s_pack.pack_current_ma = 0;
 }
 
@@ -163,12 +167,23 @@ static void test_hw_safety_ov(void)
     TEST_ASSERT_EQ(s_pack.faults.hw_ov, 1U);
 }
 
-/* ── Test: OC charge fault ─────────────────────────────────────────── */
+/* ── Test: OC charge fault (only at T<0°C per Table 13) ────────────── */
 static void test_overcurrent_charge(void)
 {
     uint32_t t;
     setup_nominal();
 
+    /* OC charge fault requires sub-zero temperature */
+    s_pack.min_temp_deci_c = -10; /* -1.0°C */
+    s_pack.max_temp_deci_c = -10;
+    {
+        uint8_t mod, sens;
+        for (mod = 0U; mod < BMS_NUM_MODULES; mod++) {
+            for (sens = 0U; sens < BMS_TEMPS_PER_MODULE; sens++) {
+                s_pack.modules[mod].temp_deci_c[sens] = -10;
+            }
+        }
+    }
     s_pack.pack_current_ma = BMS_MAX_CHARGE_MA + 1000; /* exceed limit */
 
     for (t = 0U; t < 5100U; t += 10U) {
@@ -211,13 +226,28 @@ static void test_fault_reset(void)
     TEST_ASSERT(!s_pack.fault_latched);
 }
 
-/* ── Test: warning flag on OV warning threshold ────────────────────── */
+/* ── Test: warning flag on OV warning threshold (5s delay per Table 13) ── */
 static void test_warning_ov(void)
 {
+    uint32_t t;
     setup_nominal();
     s_pack.cell_mv[200] = BMS_SE_OV_WARN_MV;
 
+    /* Warning should NOT be immediate — requires 5s delay */
     bms_protection_run(&s_prot, &s_pack, 10U);
+    TEST_ASSERT(!s_pack.has_warning);
+    TEST_ASSERT(!s_pack.fault_latched);
+
+    /* Run for just under 5s — still no warning */
+    for (t = 0U; t < 4900U; t += 10U) {
+        bms_protection_run(&s_prot, &s_pack, 10U);
+    }
+    TEST_ASSERT(!s_pack.has_warning);
+
+    /* Push past 5s — warning should assert */
+    for (t = 0U; t < 200U; t += 10U) {
+        bms_protection_run(&s_prot, &s_pack, 10U);
+    }
     TEST_ASSERT(s_pack.has_warning);
     TEST_ASSERT(!s_pack.fault_latched);
 }

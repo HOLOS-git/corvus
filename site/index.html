@@ -586,13 +586,15 @@ discharge_limit = max(<span class="number">0</span>, min(td, sd, vd))</pre>
         <span class="kw">if</span> (ctrl->hw_ov_timer >= <span class="num">1.0</span>)
             <span class="fn">trigger_hw_fault</span>(ctrl, <span class="str">"HW SAFETY: overvoltage"</span>);
     } <span class="kw">else</span> {
-        ctrl->hw_ov_timer = <span class="num">0.0</span>;
+        ctrl->hw_ov_timer -= dt * <span class="num">0.5</span>;
+        <span class="kw">if</span> (ctrl->hw_ov_timer < <span class="num">0</span>) ctrl->hw_ov_timer = <span class="num">0</span>;
     }
     <span class="cm">/* ... UV (1s), OT (5s) ... */</span>
 }</pre>
 
   <div class="c-stats">
-    <div class="c-stat"><span class="num">116</span><span class="label">Assertions, 29 Suites</span></div>
+    <div class="c-stat"><span class="num">116</span><span class="label">C Sim Assertions, 29 Suites</span></div>
+    <div class="c-stat"><span class="num">169</span><span class="label">Firmware Assertions, 9 Suites</span></div>
     <div class="c-stat"><span class="num">0</span><span class="label">Warnings (-Werror)</span></div>
     <div class="c-stat"><span class="num">✓</span><span class="label">AddressSanitizer</span></div>
     <div class="c-stat"><span class="num">0</span><span class="label">malloc calls</span></div>
@@ -603,7 +605,7 @@ discharge_limit = max(<span class="number">0</span>, min(td, sd, vd))</pre>
       <svg class="crow-badge-c crow-icon" width="40" height="40"><use href="#crow"/></svg>
       <span class="badge-gear">⚙</span>
     </div>
-    <p>116 assertions across 29 test suites. Passes AddressSanitizer clean. Zero warnings with <code>-Wall -Wextra -Werror -pedantic</code>. Zero dynamic allocation. <span class="snark">Pure C99, like your firmware. Except ours compiles without warnings.</span></p>
+    <p>116 assertions across 29 suites (C simulation) plus 169 assertions across 9 suites (firmware). Passes AddressSanitizer clean. Zero warnings with <code>-Wall -Wextra -Werror -pedantic</code>. Zero dynamic allocation. <span class="snark">Pure C99, like your firmware. Except ours compiles without warnings.</span></p>
     <p style="margin-top:1rem"><a href="https://github.com/HOLOS-git/corvus/tree/main/c" target="_blank" style="color:var(--amber)">View the C implementation on GitHub →</a></p>
   </div>
 </section>
